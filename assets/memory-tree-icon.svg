@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Memory Tree QR icon">
+  <rect width="64" height="64" rx="14" fill="#1c1712"/>
+  <path d="M11 11h14v14H11zm4 4v6h6v-6zm24-4h14v14H39zm4 4v6h6v-6zM11 39h14v14H11zm4 4v6h6v-6z" fill="#f2d18a" fill-rule="evenodd"/>
+  <path d="M31 19c-7 6-7 12-1 17l-5 15h14l-5-15c6-5 5-12-3-17z" fill="#b96332"/>
+  <circle cx="31" cy="25" r="8" fill="#c89b3c"/>
+  <circle cx="24" cy="29" r="5" fill="#a94d2d"/>
+  <circle cx="38" cy="29" r="5" fill="#d6b24d"/>
+</svg>

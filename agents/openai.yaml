@@ -1,0 +1,10 @@
+interface:
+  display_name: "Cây Ký Ức QR 3D"
+  short_description: "Tạo Cây Ký Ức 3D từ mã QR quét được"
+  icon_small: "./assets/memory-tree-icon.svg"
+  icon_large: "./assets/memory-tree-logo.svg"
+  brand_color: "#8E5B2B"
+  default_prompt: "Use $memory-tree-3d-qr to create a reusable 3D Memory Tree QR experience for my destination."
+
+policy:
+  allow_implicit_invocation: true

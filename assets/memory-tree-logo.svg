@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" role="img" aria-label="Cây Ký Ức QR 3D">
+  <defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#7f2f22"/><stop offset="1" stop-color="#d3a33f"/></linearGradient></defs>
+  <rect width="800" height="420" rx="48" fill="#17130f"/>
+  <rect x="50" y="50" width="320" height="320" rx="22" fill="#fff9e9"/>
+  <path d="M72 72h82v82H72zm18 18v46h46V90zm176-18h82v82h-82zm18 18v46h46V90zM72 266h82v82H72zm18 18v46h46v-46z" fill="#263729" fill-rule="evenodd"/>
+  <path d="M211 142c-54 48-51 104-8 137l-34 70h101l-39-70c48-32 42-94-20-137z" fill="#8b4228"/>
+  <g fill="url(#g)"><circle cx="212" cy="154" r="51"/><circle cx="160" cy="188" r="39"/><circle cx="264" cy="190" r="42"/><circle cx="210" cy="207" r="48"/></g>
+  <text x="422" y="164" fill="#f4d997" font-family="Georgia,serif" font-size="57" font-weight="700">Cây Ký Ức</text>
+  <text x="422" y="227" fill="#fff8e9" font-family="system-ui,sans-serif" font-size="42" font-weight="700">QR 3D</text>
+  <text x="422" y="283" fill="#c9b99d" font-family="system-ui,sans-serif" font-size="24">Story in 3D · Scan in 2D</text>
+</svg>
