@@ -16,7 +16,7 @@ Never draw plausible-looking QR pixels by hand. Generate the matrix from the exa
 
 1. Inspect the target project, framework, existing visual language, and mobile constraints.
 2. Confirm or infer the final QR payload. Do not copy account numbers, private identifiers, or URLs from an unrelated example.
-3. Start from `assets/starter/` for React + Vite + Three.js projects. Copy only the files needed by the target project.
+3. Start from `assets/starter/` for React + Vite + Three.js projects. It includes three scene themes, client-side QR image decoding, stateless share links, PNG export, and an optional VietQR Vercel Function. Copy only the files needed by the target project.
 4. Keep QR topology separate from artistic classification. Styling may change height, material, and decorative surroundings in showcase view; it must not add, remove, merge, or shift modules.
 5. Provide a clearly labeled scan-mode control. In scan mode:
    - use an orthographic top-down camera;
@@ -28,6 +28,8 @@ Never draw plausible-looking QR pixels by hand. Generate the matrix from the exa
 6. Provide a flat QR fallback and a normal clickable link for accessibility and WebGL failure.
 7. Respect `prefers-reduced-motion`, cap device pixel ratio, use pointer events for mouse/touch, and keep controls at least 44 px tall on small screens.
 8. Verify the exact payload round trip and test the production-sized rendering on both a narrow portrait viewport and a desktop viewport.
+9. When handling uploaded QR images, decode locally and regenerate the matrix from the decoded payload. Never trace pixels from the screenshot.
+10. For Vietnamese bank transfers, use a trusted VietQR response payload and keep API credentials server-side. Never infer or invent a payment payload from visible account text.
 
 ## Reuse guidance
 
