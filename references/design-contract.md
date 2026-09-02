@@ -17,8 +17,8 @@ The story layer may overlap the QR only in showcase view. Hide it before the sca
 ## Scan mode invariants
 
 - Orthographic camera, perpendicular to the QR plane.
-- No perspective skew, scene rotation, bloom, shadows, fog, texture, or transparency over the code.
-- Dark modules have a luminance contrast of at least 4.5:1 against the background; near-black on near-white is preferred.
+- No perspective skew, scene rotation, bloom, shadows, fog, gradients, texture, or transparency over the code.
+- Every dark-module color has a luminance contrast of at least 4.5:1 against the background. A scene-derived multicolor foreground on one uniform pale background is allowed; protected patterns should use the darkest color.
 - Finder, timing, alignment, format, version, and data modules retain identical size and spacing.
 - Four-module quiet zone remains empty on every side.
 - Entire code stays inside the viewport with padding; no crop beneath browser chrome or safe areas.

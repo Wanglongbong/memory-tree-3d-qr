@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
-    "verify:qr": "node scripts/verify-qr.mjs"
+    "verify:qr": "node scripts/verify-qr.mjs",
+    "verify:colored": "node scripts/verify-colored-qr.mjs"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

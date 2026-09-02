@@ -31,7 +31,7 @@ npm install
 npm run dev
 ```
 
-Ứng dụng cho phép tải ảnh QR để đọc ngay trên thiết bị, nhập link/nội dung hoặc tạo VietQR bằng số tài khoản ngân hàng Việt Nam. Sau đó chọn cảnh, mùa, ngày/đêm, màu sắc và chuyển giữa **Trưng bày** và **Quét mã**.
+Ứng dụng cho phép tải ảnh QR để đọc ngay trên thiết bị, nhập link/nội dung hoặc tạo VietQR bằng số tài khoản ngân hàng Việt Nam. Sau đó chọn cảnh, mùa, ngày/đêm, màu sắc và chuyển giữa **Vật phẩm 3D** và **Quét mã**. Các module co cụm thành vật phẩm ở góc thấp, rồi trải ra đúng ma trận khi camera lên cao; sàn và QR đều dùng bảng màu đa sắc của cảnh.
 
 ## Kết nối VietQR
 
@@ -56,7 +56,7 @@ Mô hình 3D chỉ là lớp nghệ thuật. Chế độ quét luôn dùng đún
 ./scripts/check_starter.sh
 ```
 
-Kiểm tra tự động tạo PNG QR, giải mã lại đúng payload, chạy TypeScript và build Vite. Trước khi phát hành, vẫn nên thử quét màn hình thật bằng hai ứng dụng camera khác nhau.
+Kiểm tra tự động cả QR đơn sắc lẫn ba bảng màu đa sắc, giải mã lại đúng payload, chạy TypeScript và build Vite. Trước khi phát hành, vẫn nên thử quét màn hình thật bằng hai ứng dụng camera khác nhau.
 
 ## License
 

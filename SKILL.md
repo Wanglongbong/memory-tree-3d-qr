@@ -21,9 +21,9 @@ Never draw plausible-looking QR pixels by hand. Generate the matrix from the exa
 5. Provide a clearly labeled scan-mode control. In scan mode:
    - use an orthographic top-down camera;
    - reset scene rotation;
-   - render all dark modules in one near-black color;
-   - render the background and four-module quiet zone in one near-white color;
-   - hide branches, leaves, particles, labels, and lights that overlap the code;
+   - render dark modules in either one near-black color or a scene-derived multicolor palette whose every color meets the contrast requirement;
+   - render the background and four-module quiet zone in one uniform light color; this may be a pale scene color rather than white;
+   - hide branches, leaves, particles, labels, shadows, gradients, and lights that overlap the code;
    - stop auto-orbit and unnecessary motion.
 6. Provide a flat QR fallback and a normal clickable link for accessibility and WebGL failure.
 7. Respect `prefers-reduced-motion`, cap device pixel ratio, use pointer events for mouse/touch, and keep controls at least 44 px tall on small screens.
