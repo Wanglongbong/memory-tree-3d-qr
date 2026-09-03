@@ -22,10 +22,17 @@ const roleBases: Record<SceneKind, Record<QrVisualRole, string>> = {
   koi: { protected: "#173d48", canopy: "#71352f", roots: "#294c66", landscape: "#235d57" },
 };
 
+const treeSeasonBases: Record<Season, Record<QrVisualRole, string>> = {
+  spring: { protected: "#214b32", canopy: "#3f642f", roots: "#4f5b29", landscape: "#5b4c28" },
+  summer: { protected: "#17452f", canopy: "#315d2c", roots: "#465b24", landscape: "#514826" },
+  autumn: { protected: "#52351f", canopy: "#77431f", roots: "#5f3d22", landscape: "#765322" },
+  winter: { protected: "#24433a", canopy: "#36584a", roots: "#4e4d37", landscape: "#4a5834" },
+};
+
 export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDay, accentHex: string): ScenePalette {
   const floor = new THREE.Color(seasonalFloor[scene][season]);
   const accent = new THREE.Color(isHexColor(accentHex) ? accentHex : "#d99b3d");
-  const bases = roleBases[scene];
+  const bases = scene === "tree" ? treeSeasonBases[season] : roleBases[scene];
   const modules = Object.fromEntries((Object.keys(bases) as QrVisualRole[]).map((role, index) => {
     const base = new THREE.Color(bases[role]);
     if (role !== "protected") base.lerp(accent, scene === "tree" ? 0.1 + index * 0.025 : 0.08 + index * 0.018);

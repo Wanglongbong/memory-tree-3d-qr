@@ -4,7 +4,10 @@ import { PNG } from "pngjs";
 
 const payload = "https://example.com/ky-uc/colored-round-trip?lang=vi";
 const palettes = [
-  { name: "tree", floor: "#e6cc91", colors: ["#23452f", "#4d642f", "#633b2b", "#73502d"] },
+  { name: "tree-spring", floor: "#dfe8b6", colors: ["#214b32", "#3f642f", "#4f5b29", "#5b4c28"] },
+  { name: "tree-summer", floor: "#bfd79d", colors: ["#17452f", "#315d2c", "#465b24", "#514826"] },
+  { name: "tree-autumn", floor: "#e6cc91", colors: ["#52351f", "#77431f", "#5f3d22", "#765322"] },
+  { name: "tree-winter", floor: "#dbe8e6", colors: ["#24433a", "#36584a", "#4e4d37", "#4a5834"] },
   { name: "lantern", floor: "#edc28c", colors: ["#54241f", "#7a2f25", "#66401f", "#815022"] },
   { name: "koi", floor: "#a9d9d5", colors: ["#173d48", "#71352f", "#294c66", "#235d57"] },
 ];
