@@ -12,6 +12,7 @@ export type MemoryProject = {
   time: TimeOfDay;
   palette: string;
   accent: string;
+  floorColor?: string;
   title: string;
   message: string;
 };

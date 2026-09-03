@@ -10,6 +10,9 @@ type GrowthCell = {
   x: number; z: number; height: number; canopy: number;
   role: QrVisualRole; phase: number; crownScale: number;
 };
+type GrassBlade = {
+  x: number; z: number; height: number; phase: number; role: QrVisualRole;
+};
 
 const sceneNames: Record<SceneKind, string> = { tree: "Cây Kí Ức", lantern: "Vườn Đèn Lồng", koi: "Hồ Koi" };
 
@@ -19,7 +22,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
   const [mode, setModeState] = useState<ViewMode>("showcase");
   const [status, setStatus] = useState("Đang kết tinh vật phẩm từ mã QR…");
   const safePayload = project.payload.trim() || "https://example.com/loi-nhan";
-  const palette = getScenePalette(project.scene, project.season, project.time, project.accent);
+  const palette = getScenePalette(project.scene, project.season, project.time, project.accent, project.floorColor);
 
   function setMode(next: ViewMode) { modeRef.current = next; setModeState(next); }
 
@@ -53,6 +56,11 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const groundMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const grassBlades = project.scene === "tree" ? createGrassBlades(entries) : [];
+    const grassGeometry = new THREE.ConeGeometry(0.065, 1, 3); grassGeometry.translate(0, 0.5, 0);
+    const grassMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, flatShading: true });
+    const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassBlades.length);
+    grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const crownMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
     const crownMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), crownMaterial, entries.length);
     crownMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -61,10 +69,12 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     ornamentMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const moduleColors = Object.fromEntries((Object.keys(palette.modules) as QrVisualRole[]).map((role) => [role, new THREE.Color(palette.modules[role])])) as Record<QrVisualRole, THREE.Color>;
     entries.forEach((entry, index) => { groundMesh.setColorAt(index, moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]); ornamentMesh.setColorAt(index, moduleColors[entry.role]); });
+    grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, moduleColors[blade.role]));
     if (groundMesh.instanceColor) groundMesh.instanceColor.needsUpdate = true;
+    if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
     if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
     if (ornamentMesh.instanceColor) ornamentMesh.instanceColor.needsUpdate = true;
-    root.add(groundMesh, crownMesh, ornamentMesh);
+    root.add(groundMesh, grassMesh, crownMesh, ornamentMesh);
 
     const scanFloorMaterial = new THREE.MeshBasicMaterial({ color: palette.floor });
     const scanFloor = new THREE.Mesh(new THREE.BoxGeometry(matrix.size + 8, 0.42, matrix.size + 8), scanFloorMaterial); scanFloor.position.y = -0.28; root.add(scanFloor);
@@ -106,7 +116,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     }
     const observer = new ResizeObserver(resize); observer.observe(container); resize();
 
-    function updateGrowth(growthProgress: number) {
+    function updateGrowth(growthProgress: number, time: number, windStrength: number) {
       entries.forEach((entry, index) => {
         const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.22 - entry.phase * 0.22, 0, 1));
         const groundWidth = 0.9 * local;
@@ -116,15 +126,26 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
         const crownY = THREE.MathUtils.lerp(0.2, entry.height, local);
         const crownWidth = 0.88 * local * entry.canopy;
         cellScale.set(Math.max(0.001, crownWidth), Math.max(0.001, 0.2 * local), Math.max(0.001, crownWidth));
-        dummy.position.set(entry.x, crownY, entry.z); dummy.rotation.set(0, 0, 0); dummy.scale.copy(cellScale); dummy.updateMatrix(); crownMesh.setMatrixAt(index, dummy.matrix);
+        const leafWind = Math.sin(time * 0.00135 + entry.phase * 19) * 0.045 * windStrength;
+        dummy.position.set(entry.x, crownY, entry.z); dummy.rotation.set(leafWind * 0.55, 0, leafWind); dummy.scale.copy(cellScale); dummy.updateMatrix(); crownMesh.setMatrixAt(index, dummy.matrix);
 
         const ornamentSize = entry.crownScale * local * entry.canopy;
         ornamentScale.setScalar(Math.max(0.0001, ornamentSize));
         if (project.scene === "lantern") ornamentScale.set(ornamentSize * 0.72, ornamentSize * 1.08, ornamentSize * 0.72);
         if (project.scene === "koi") ornamentScale.set(ornamentSize * 1.3, ornamentSize * 0.24, ornamentSize);
-        dummy.position.set(entry.x, crownY - 0.12, entry.z); dummy.rotation.set(0, entry.phase * Math.PI * 2, 0); dummy.scale.copy(ornamentScale); dummy.updateMatrix(); ornamentMesh.setMatrixAt(index, dummy.matrix);
+        dummy.position.set(entry.x, crownY - 0.12, entry.z); dummy.rotation.set(leafWind, entry.phase * Math.PI * 2, leafWind * 0.7); dummy.scale.copy(ornamentScale); dummy.updateMatrix(); ornamentMesh.setMatrixAt(index, dummy.matrix);
       });
       groundMesh.instanceMatrix.needsUpdate = true; crownMesh.instanceMatrix.needsUpdate = true; ornamentMesh.instanceMatrix.needsUpdate = true;
+
+      grassBlades.forEach((blade, index) => {
+        const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.25 - blade.phase * 0.18, 0, 1));
+        const wind = Math.sin(time * 0.002 + blade.phase * 23) * 0.16 * windStrength;
+        dummy.position.set(blade.x, 0.11, blade.z);
+        dummy.rotation.set(wind * 0.45, blade.phase * Math.PI, wind);
+        dummy.scale.set(1, Math.max(0.001, blade.height * local), 1);
+        dummy.updateMatrix(); grassMesh.setMatrixAt(index, dummy.matrix);
+      });
+      grassMesh.instanceMatrix.needsUpdate = true;
     }
 
     function updateViewLayers(mix: number) {
@@ -133,7 +154,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       particles.visible = mix < 0.62; particles.scale.setScalar(Math.max(0.001, 1 - mix));
     }
 
-    updateGrowth(startsInScan ? 1 : 0);
+    updateGrowth(startsInScan ? 1 : 0, bornAt, 0);
     updateViewLayers(scanMix);
     let frame = 0;
     function animate(now: number) {
@@ -150,7 +171,8 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       const desiredMix = activeMode === "scan" ? 1 : elevationMix;
       scanMix = THREE.MathUtils.lerp(scanMix, desiredMix, easing);
       const growthProgress = activeMode === "scan" ? 1 : THREE.MathUtils.clamp((now - bornAt) / 1900, 0, 1);
-      if (Math.abs(growthProgress - previousGrowth) > 0.001) { updateGrowth(growthProgress); previousGrowth = growthProgress; }
+      const windStrength = reducedMotion ? 0 : 1 - smootherstep(scanMix);
+      if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && (windStrength > 0.001 || Math.abs(scanMix - previousMix) > 0.001))) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
       if (!reducedMotion && !dragging && activeMode === "showcase" && scanMix < 0.12) targetYaw += delta * 0.045;
       root.rotation.y = currentYaw * (1 - smootherstep(scanMix));
@@ -170,7 +192,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       scene.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.geometry) geometries.add(mesh.geometry); const material = mesh.material; if (material) (Array.isArray(material) ? material : [material]).forEach((item) => materials.add(item)); });
       geometries.forEach((geometry) => geometry.dispose()); materials.forEach((material) => material.dispose()); renderer.dispose(); renderer.domElement.remove();
     };
-  }, [safePayload, project.scene, project.season, project.time, project.accent]);
+  }, [safePayload, project.scene, project.season, project.time, project.accent, project.floorColor]);
 
   async function downloadQr(hd: boolean) {
     const matrix = createQrMatrix(safePayload); const size = hd ? 3200 : 1600, footer = hd ? 160 : 96, cells = matrix.size + 8;
@@ -199,11 +221,29 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
     const x = c - centre, z = r - centre, role = classifyDarkModule(r, c, matrix.size), seed = hash2(r, c), phase = seed;
     const radius = Math.hypot(x, z) / (matrix.size * 0.72);
     const dome = Math.sqrt(Math.max(0, 1 - Math.min(1, radius) ** 2));
-    const canopy = scene === "tree" ? smootherstep((dome - 0.36) / 0.5) : 1;
-    const height = scene === "tree" ? 0.2 + matrix.size * Math.pow(canopy, 1.45) * 0.42 + seed * 0.38 * canopy : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
+    const canopy = 1;
+    const height = scene === "tree" ? matrix.size * (0.15 + Math.pow(dome, 1.7) * 0.27) + seed * 0.42 : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
     entries.push({ x, z, height, canopy, role, phase, crownScale: scene === "tree" ? 0.27 + dome * 0.14 + seed * 0.045 : scene === "lantern" ? 0.42 + seed * 0.08 : 0.38 + seed * 0.08 });
   }));
   return entries;
+}
+
+function createGrassBlades(entries: GrowthCell[]): GrassBlade[] {
+  const blades: GrassBlade[] = [];
+  entries.forEach((entry, cellIndex) => {
+    for (let bladeIndex = 0; bladeIndex < 5; bladeIndex += 1) {
+      const seedX = hash2(cellIndex * 7 + bladeIndex, 17);
+      const seedZ = hash2(cellIndex * 11 + bladeIndex, 29);
+      blades.push({
+        x: entry.x + (seedX - 0.5) * 0.58,
+        z: entry.z + (seedZ - 0.5) * 0.58,
+        height: 0.58 + hash2(cellIndex * 13 + bladeIndex, 41) * 0.82,
+        phase: hash2(cellIndex * 19 + bladeIndex, 53),
+        role: entry.role,
+      });
+    }
+  });
+  return blades;
 }
 
 function createOrnamentGeometry(scene: SceneKind) {

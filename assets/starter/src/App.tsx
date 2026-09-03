@@ -38,7 +38,7 @@ export function App() {
     }).catch(() => undefined);
   }, []);
   const statusText = useMemo(() => project.source === "vietqr" ? `VietQR · ${bank.bankName}` : project.source === "upload" ? "QR từ ảnh trên thiết bị" : "Nội dung tùy chọn", [bank.bankName, project.source]);
-  const scenePalette = useMemo(() => getScenePalette(project.scene, project.season, project.time, project.accent), [project.scene, project.season, project.time, project.accent]);
+  const scenePalette = useMemo(() => getScenePalette(project.scene, project.season, project.time, project.accent, project.floorColor), [project.scene, project.season, project.time, project.accent, project.floorColor]);
 
   function update<K extends keyof MemoryProject>(key: K, value: MemoryProject[K]) { setProject((current) => ({ ...current, [key]: value })); }
 
@@ -107,6 +107,7 @@ export function App() {
         <label>Mùa<div className="segmented">{seasons.map(({id, name}) => <button key={id} className={project.season === id ? "active" : ""} onClick={() => update("season", id)}>{name}</button>)}</div></label>
         <label>Ánh sáng<div className="segmented two"><button className={project.time === "day" ? "active" : ""} onClick={() => update("time", "day" as TimeOfDay)}>☀ Ban ngày</button><button className={project.time === "night" ? "active" : ""} onClick={() => update("time", "night" as TimeOfDay)}>◐ Ban đêm</button></div></label>
         <label>Màu nhấn<div className="color-row"><input type="color" value={project.accent} onChange={(e) => update("accent", e.target.value)} aria-label="Chọn màu nhấn"/><span>{project.accent.toUpperCase()}</span></div></label>
+        <label>Màu sàn <small>(tự giữ độ sáng để quét)</small><div className="color-row"><input type="color" value={scenePalette.floor} onChange={(e) => update("floorColor", e.target.value)} aria-label="Chọn màu sàn"/><span>{scenePalette.floor.toUpperCase()}</span><button type="button" onClick={() => update("floorColor", undefined)}>Theo mùa</button></div></label>
         <div className="palette-preview" aria-label="Bảng màu QR hiện tại"><i style={{background: scenePalette.floor}} title="Màu sàn"/>{Object.values(scenePalette.modules).map((color, index) => <i key={`${color}-${index}`} style={{background: color}} title="Màu module QR"/>)}<span>Sàn + 4 màu QR</span></div>
         <label>Tên tác phẩm<input className="text-control" value={project.title} maxLength={48} onChange={(e) => update("title", e.target.value)} /></label>
         <label>Lời nhắn<textarea className="text-control" value={project.message} rows={2} maxLength={120} onChange={(e) => update("message", e.target.value)} /></label>

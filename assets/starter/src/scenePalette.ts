@@ -29,8 +29,8 @@ const treeSeasonBases: Record<Season, Record<QrVisualRole, string>> = {
   winter: { protected: "#24433a", canopy: "#36584a", roots: "#4e4d37", landscape: "#4a5834" },
 };
 
-export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDay, accentHex: string): ScenePalette {
-  const floor = new THREE.Color(seasonalFloor[scene][season]);
+export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDay, accentHex: string, floorHex?: string): ScenePalette {
+  const floor = ensureLightFloor(new THREE.Color(isHexColor(floorHex ?? "") ? floorHex! : seasonalFloor[scene][season]));
   const accent = new THREE.Color(isHexColor(accentHex) ? accentHex : "#d99b3d");
   const bases = scene === "tree" ? treeSeasonBases[season] : roleBases[scene];
   const modules = Object.fromEntries((Object.keys(bases) as QrVisualRole[]).map((role, index) => {
@@ -61,16 +61,22 @@ function ensureContrast(color: THREE.Color, background: THREE.Color, minimum: nu
   let lightness = Math.min(hsl.l, 0.34);
   for (let attempt = 0; attempt < 24; attempt += 1) {
     result.setHSL(hsl.h, Math.max(0.38, hsl.s), lightness);
-    const ratio = (luminance(background) + 0.05) / (luminance(result) + 0.05);
+    const backgroundLuminance = luminance(background); const resultLuminance = luminance(result);
+    const ratio = (Math.max(backgroundLuminance, resultLuminance) + 0.05) / (Math.min(backgroundLuminance, resultLuminance) + 0.05);
     if (ratio >= minimum) break;
     lightness = Math.max(0.06, lightness - 0.018);
   }
   return result;
 }
 
+function ensureLightFloor(color: THREE.Color) {
+  const result = color.clone(); const hsl = { h: 0, s: 0, l: 0 }; result.getHSL(hsl);
+  while (luminance(result) < 0.58 && hsl.l < 0.92) { hsl.l += 0.025; result.setHSL(hsl.h, hsl.s, hsl.l); }
+  return result;
+}
+
 function luminance(color: THREE.Color) {
-  const linear = [color.r, color.g, color.b].map((component) => component <= 0.03928 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
 }
 
 function isHexColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value); }
