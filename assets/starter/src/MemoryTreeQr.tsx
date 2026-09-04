@@ -57,7 +57,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const grassBlades = project.scene === "tree" ? createGrassBlades(entries) : [];
-    const grassGeometry = new THREE.ConeGeometry(0.065, 1, 3); grassGeometry.translate(0, 0.5, 0);
+    const grassGeometry = new THREE.ConeGeometry(0.052, 1, 3); grassGeometry.translate(0, 0.5, 0);
     const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, flatShading: true });
     const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassBlades.length);
     grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -75,6 +75,18 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
     if (ornamentMesh.instanceColor) ornamentMesh.instanceColor.needsUpdate = true;
     root.add(groundMesh, grassMesh, crownMesh, ornamentMesh);
+
+    const treeShadowEntries = project.scene === "tree" ? entries.filter((entry) => entry.role === "canopy") : [];
+    const treeShadowColor = new THREE.Color(palette.modules.landscape).lerp(new THREE.Color(palette.trunk), 0.36);
+    const treeShadowMaterial = new THREE.MeshBasicMaterial({ color: treeShadowColor, transparent: true, opacity: 0.34, depthWrite: false });
+    const treeShadowMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.035, 0.9), treeShadowMaterial, treeShadowEntries.length);
+    const shadowDummy = new THREE.Object3D();
+    treeShadowEntries.forEach((entry, index) => {
+      shadowDummy.position.set(entry.x, 0.18, entry.z); shadowDummy.rotation.set(0, 0, 0); shadowDummy.scale.set(1, 1, 1); shadowDummy.updateMatrix();
+      treeShadowMesh.setMatrixAt(index, shadowDummy.matrix);
+    });
+    treeShadowMesh.instanceMatrix.needsUpdate = true;
+    root.add(treeShadowMesh);
 
     const scanFloorMaterial = new THREE.MeshBasicMaterial({ color: palette.floor });
     const scanFloor = new THREE.Mesh(new THREE.BoxGeometry(matrix.size + 8, 0.42, matrix.size + 8), scanFloorMaterial); scanFloor.position.y = -0.28; root.add(scanFloor);
@@ -102,7 +114,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     function onPointerMove(event: PointerEvent) {
       if (!dragging || modeRef.current === "scan") return;
       targetYaw = startYaw + (event.clientX - startX) * 0.008;
-      targetElevation = THREE.MathUtils.clamp(startElevation - (event.clientY - startY) * 0.006, 0.34, 1.47);
+      targetElevation = THREE.MathUtils.clamp(startElevation - (event.clientY - startY) * 0.006, 0.34, Math.PI / 2);
     }
     function onPointerUp(event: PointerEvent) { dragging = false; if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId); }
     renderer.domElement.addEventListener("pointerdown", onPointerDown); renderer.domElement.addEventListener("pointermove", onPointerMove); renderer.domElement.addEventListener("pointerup", onPointerUp); renderer.domElement.addEventListener("pointercancel", onPointerUp);
@@ -139,9 +151,9 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
 
       grassBlades.forEach((blade, index) => {
         const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.25 - blade.phase * 0.18, 0, 1));
-        const wind = Math.sin(time * 0.002 + blade.phase * 23) * 0.16 * windStrength;
+        const wind = Math.sin(time * 0.002 + blade.phase * 23) * 0.11 * windStrength;
         dummy.position.set(blade.x, 0.11, blade.z);
-        dummy.rotation.set(wind * 0.45, blade.phase * Math.PI, wind);
+        dummy.rotation.set(wind * 0.35, blade.phase * Math.PI, wind);
         dummy.scale.set(1, Math.max(0.001, blade.height * local), 1);
         dummy.updateMatrix(); grassMesh.setMatrixAt(index, dummy.matrix);
       });
@@ -152,9 +164,11 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       organicFloorMaterial.opacity = 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.45) / 0.45, 0, 1)); organicFloor.visible = organicFloorMaterial.opacity > 0.01;
       setLayerOpacity(supportLayer, 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.25) / 0.54, 0, 1)));
       if (project.scene === "tree") {
-        const qrLeafOpacity = THREE.MathUtils.lerp(0.1, 1, smootherstep(THREE.MathUtils.clamp((mix - 0.04) / 0.74, 0, 1)));
+        const qrAlignment = smootherstep(THREE.MathUtils.clamp((mix - 0.04) / 0.84, 0, 1));
+        const qrLeafOpacity = THREE.MathUtils.lerp(0.1, 1, qrAlignment);
         crownMaterial.opacity = qrLeafOpacity; crownMaterial.depthWrite = qrLeafOpacity > 0.5;
-        ornamentMaterial.opacity = qrLeafOpacity; ornamentMaterial.depthWrite = qrLeafOpacity > 0.5;
+        ornamentMaterial.opacity = THREE.MathUtils.lerp(0.12, 0, qrAlignment); ornamentMaterial.depthWrite = false;
+        treeShadowMaterial.opacity = THREE.MathUtils.lerp(0.34, 0.56, qrAlignment);
       }
       particles.visible = mix < 0.62; particles.scale.setScalar(Math.max(0.001, 1 - mix));
     }
@@ -172,9 +186,12 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       }
       const easing = reducedMotion ? 1 : 1 - Math.exp(-delta * 5.5);
       currentElevation = THREE.MathUtils.lerp(currentElevation, targetElevation, easing); currentYaw = THREE.MathUtils.lerp(currentYaw, targetYaw, easing);
-      const elevationMix = THREE.MathUtils.clamp((currentElevation - 0.72) / 0.78, 0, 0.94);
+      if (Math.abs(currentElevation - targetElevation) < 0.0001) currentElevation = targetElevation;
+      if (Math.abs(currentYaw - targetYaw) < 0.0001) currentYaw = targetYaw;
+      const elevationMix = smootherstep(THREE.MathUtils.clamp((currentElevation - 0.72) / (Math.PI / 2 - 0.72), 0, 1));
       const desiredMix = activeMode === "scan" ? 1 : elevationMix;
       scanMix = THREE.MathUtils.lerp(scanMix, desiredMix, easing);
+      if (Math.abs(scanMix - desiredMix) < 0.0001) scanMix = desiredMix;
       const growthProgress = activeMode === "scan" ? 1 : THREE.MathUtils.clamp((now - bornAt) / 1900, 0, 1);
       const windStrength = reducedMotion ? 0 : 1 - smootherstep(scanMix);
       if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && (windStrength > 0.001 || Math.abs(scanMix - previousMix) > 0.001))) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
@@ -188,7 +205,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       if (!reducedMotion) { particles.rotation.y += delta * 0.07; animateSupportLayer(supportLayer, now, project.scene); }
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
-    setStatus("Cây Kí Ức trưởng thành từ từng ô QR"); frame = requestAnimationFrame(animate);
+    setStatus("Kéo thẳng lên để ghép lá, cỏ và bóng cây thành mã QR"); frame = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frame); observer.disconnect();
@@ -245,7 +262,7 @@ function createGrassBlades(entries: GrowthCell[]): GrassBlade[] {
       blades.push({
         x: entry.x + (seedX - 0.5) * 0.58,
         z: entry.z + (seedZ - 0.5) * 0.58,
-        height: 0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12,
+        height: (0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12) * 1.7,
         phase: hash2(cellIndex * 19 + bladeIndex, 53),
         role: entry.role,
       });
