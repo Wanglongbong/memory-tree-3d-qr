@@ -176,14 +176,14 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
       if (!reducedMotion && !dragging && activeMode === "showcase" && scanMix < 0.12) targetYaw += delta * 0.045;
       root.rotation.y = currentYaw * (1 - smootherstep(scanMix));
-      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.14 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
+      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.085 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
       camera.position.set(0, lookHeight + Math.sin(currentElevation) * distance, Math.max(0.001, Math.cos(currentElevation) * distance));
       cameraUp.lerpVectors(showUp, scanUp, smootherstep(scanMix)).normalize(); camera.up.copy(cameraUp);
       camera.zoom = THREE.MathUtils.lerp(project.scene === "tree" ? 1.06 : project.scene === "lantern" ? 1.1 : 1.04, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
       if (!reducedMotion) { particles.rotation.y += delta * 0.07; animateSupportLayer(supportLayer, now, project.scene); }
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
-    setStatus("Kéo để quan sát các ô QR sinh trưởng thành cỏ và tán lá"); frame = requestAnimationFrame(animate);
+    setStatus("Cây cô đặc ở tâm; cỏ và lá mọc theo từng ô QR"); frame = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frame); observer.disconnect();
@@ -221,9 +221,10 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
     const x = c - centre, z = r - centre, role = classifyDarkModule(r, c, matrix.size), seed = hash2(r, c), phase = seed;
     const radius = Math.hypot(x, z) / (matrix.size * 0.72);
     const dome = Math.sqrt(Math.max(0, 1 - Math.min(1, radius) ** 2));
-    const canopy = 1;
-    const height = scene === "tree" ? matrix.size * (0.15 + Math.pow(dome, 1.7) * 0.27) + seed * 0.42 : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
-    entries.push({ x, z, height, canopy, role, phase, crownScale: scene === "tree" ? 0.27 + dome * 0.14 + seed * 0.045 : scene === "lantern" ? 0.42 + seed * 0.08 : 0.38 + seed * 0.08 });
+    const centreRadius = Math.hypot(x, z) / matrix.size;
+    const canopy = scene === "tree" ? 1 - smootherstep((centreRadius - 0.045) / 0.105) : 1;
+    const height = scene === "tree" ? matrix.size * (0.105 + canopy * 0.105) + seed * 0.24 * canopy : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
+    entries.push({ x, z, height, canopy, role, phase, crownScale: scene === "tree" ? 0.25 + canopy * 0.065 + seed * 0.035 : scene === "lantern" ? 0.42 + seed * 0.08 : 0.38 + seed * 0.08 });
   }));
   return entries;
 }
@@ -231,13 +232,14 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
 function createGrassBlades(entries: GrowthCell[]): GrassBlade[] {
   const blades: GrassBlade[] = [];
   entries.forEach((entry, cellIndex) => {
-    for (let bladeIndex = 0; bladeIndex < 5; bladeIndex += 1) {
+    if (entry.canopy > 0.42) return;
+    for (let bladeIndex = 0; bladeIndex < 7; bladeIndex += 1) {
       const seedX = hash2(cellIndex * 7 + bladeIndex, 17);
       const seedZ = hash2(cellIndex * 11 + bladeIndex, 29);
       blades.push({
         x: entry.x + (seedX - 0.5) * 0.58,
         z: entry.z + (seedZ - 0.5) * 0.58,
-        height: 0.58 + hash2(cellIndex * 13 + bladeIndex, 41) * 0.82,
+        height: 0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12,
         phase: hash2(cellIndex * 19 + bladeIndex, 53),
         role: entry.role,
       });
@@ -257,10 +259,22 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
   const main = new THREE.MeshStandardMaterial({ color: palette.trunk, roughness: 0.9, transparent: true });
   const accent = new THREE.MeshStandardMaterial({ color: palette.glow, emissive: palette.glow, emissiveIntensity: scene === "lantern" ? 0.8 : 0.12, roughness: 0.72, transparent: true });
   if (scene === "tree") {
-    const height = size * 0.28; const trunk = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.022, size * 0.045, height, 8), main); trunk.position.y = height / 2; group.add(trunk);
-    const stride = Math.max(1, Math.floor(entries.length / 24));
-    entries.filter((entry, index) => index % stride === 0 && entry.height > height * 0.75).slice(0, 24).forEach((entry) => addCylinderBetween(group, main, new THREE.Vector3(0, height * 0.64, 0), new THREE.Vector3(entry.x, entry.height - 0.28, entry.z), size * 0.006));
-    for (let i = 0; i < 9; i += 1) { const light = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), accent); light.position.set(Math.sin(i * 2.1) * size * 0.09, height + (i % 3) * 1.2, Math.cos(i * 1.7) * size * 0.08); light.userData.float = i; group.add(light); }
+    const height = size * 0.16; const trunk = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.014, size * 0.029, height, 8), main); trunk.position.y = height / 2; group.add(trunk);
+    const canopyEntries = entries.filter((entry) => entry.canopy > 0.42);
+    const stride = Math.max(1, Math.floor(canopyEntries.length / 15));
+    canopyEntries.filter((_, index) => index % stride === 0).slice(0, 15).forEach((entry) => addCylinderBetween(group, main, new THREE.Vector3(0, height * 0.62, 0), new THREE.Vector3(entry.x, entry.height - 0.18, entry.z), size * 0.0042));
+    const glowColor = new THREE.Color(palette.glow);
+    const leafColors = [palette.modules.canopy, palette.modules.landscape, palette.modules.roots].map((color, index) => new THREE.Color(color).lerp(glowColor, 0.66 + index * 0.06));
+    const leafMaterials = leafColors.map((color) => new THREE.MeshBasicMaterial({ color, transparent: true }));
+    for (let i = 0; i < 36; i += 1) {
+      const angle = hash2(i, 67) * Math.PI * 2;
+      const radius = Math.sqrt(hash2(i, 71)) * size * 0.087;
+      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.56 + hash2(i, 73) * 0.3, 0), leafMaterials[i % leafMaterials.length]);
+      leaf.position.set(Math.cos(angle) * radius, height + size * (0.012 + hash2(i, 79) * 0.073), Math.sin(angle) * radius);
+      leaf.scale.set(1.08 + hash2(i, 83) * 0.48, 0.72 + hash2(i, 89) * 0.34, 1.08 + hash2(i, 97) * 0.48);
+      group.add(leaf);
+    }
+    for (let i = 0; i < 6; i += 1) { const light = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), accent); light.position.set(Math.sin(i * 2.1) * size * 0.055, height + (i % 3) * 0.7, Math.cos(i * 1.7) * size * 0.05); light.userData.float = i; group.add(light); }
   } else if (scene === "lantern") {
     for (let i = -4; i <= 4; i += 1) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, size * 0.18, 6), main); pole.position.set(i * size * 0.035, size * 0.09, (i % 2) * size * 0.07); group.add(pole); }
     const beam = new THREE.Mesh(new THREE.BoxGeometry(size * 0.42, 0.42, 0.58), main); beam.position.y = size * 0.19; group.add(beam);
