@@ -53,18 +53,18 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const glow = new THREE.PointLight(palette.glow, night ? 24 : 10, matrix.size * 1.4); glow.position.set(0, matrix.size * 0.26, 0); scene.add(glow);
 
     const entries = createGrowthCells(matrix, project.scene);
-    const groundMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const grassBlades = project.scene === "tree" ? createGrassBlades(entries) : [];
     const grassGeometry = new THREE.ConeGeometry(0.065, 1, 3); grassGeometry.translate(0, 0.5, 0);
-    const grassMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, flatShading: true });
+    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, flatShading: true });
     const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassBlades.length);
     grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const crownMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const crownMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: project.scene === "tree" });
     const crownMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), crownMaterial, entries.length);
     crownMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const ornamentMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, flatShading: project.scene !== "koi" });
+    const ornamentMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: project.scene === "tree", roughness: 0.78, flatShading: project.scene !== "koi" });
     const ornamentMesh = new THREE.InstancedMesh(createOrnamentGeometry(project.scene), ornamentMaterial, entries.length);
     ornamentMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const moduleColors = Object.fromEntries((Object.keys(palette.modules) as QrVisualRole[]).map((role) => [role, new THREE.Color(palette.modules[role])])) as Record<QrVisualRole, THREE.Color>;
@@ -151,6 +151,11 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     function updateViewLayers(mix: number) {
       organicFloorMaterial.opacity = 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.45) / 0.45, 0, 1)); organicFloor.visible = organicFloorMaterial.opacity > 0.01;
       setLayerOpacity(supportLayer, 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.25) / 0.54, 0, 1)));
+      if (project.scene === "tree") {
+        const qrLeafOpacity = THREE.MathUtils.lerp(0.1, 1, smootherstep(THREE.MathUtils.clamp((mix - 0.04) / 0.74, 0, 1)));
+        crownMaterial.opacity = qrLeafOpacity; crownMaterial.depthWrite = qrLeafOpacity > 0.5;
+        ornamentMaterial.opacity = qrLeafOpacity; ornamentMaterial.depthWrite = qrLeafOpacity > 0.5;
+      }
       particles.visible = mix < 0.62; particles.scale.setScalar(Math.max(0.001, 1 - mix));
     }
 
@@ -176,14 +181,14 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
       if (!reducedMotion && !dragging && activeMode === "showcase" && scanMix < 0.12) targetYaw += delta * 0.045;
       root.rotation.y = currentYaw * (1 - smootherstep(scanMix));
-      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.085 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
+      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.145 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
       camera.position.set(0, lookHeight + Math.sin(currentElevation) * distance, Math.max(0.001, Math.cos(currentElevation) * distance));
       cameraUp.lerpVectors(showUp, scanUp, smootherstep(scanMix)).normalize(); camera.up.copy(cameraUp);
       camera.zoom = THREE.MathUtils.lerp(project.scene === "tree" ? 1.06 : project.scene === "lantern" ? 1.1 : 1.04, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
       if (!reducedMotion) { particles.rotation.y += delta * 0.07; animateSupportLayer(supportLayer, now, project.scene); }
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
-    setStatus("Cây cô đặc ở tâm; cỏ và lá mọc theo từng ô QR"); frame = requestAnimationFrame(animate);
+    setStatus("Cây Kí Ức trưởng thành từ từng ô QR"); frame = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frame); observer.disconnect();
@@ -221,10 +226,11 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
     const x = c - centre, z = r - centre, role = classifyDarkModule(r, c, matrix.size), seed = hash2(r, c), phase = seed;
     const radius = Math.hypot(x, z) / (matrix.size * 0.72);
     const dome = Math.sqrt(Math.max(0, 1 - Math.min(1, radius) ** 2));
-    const centreRadius = Math.hypot(x, z) / matrix.size;
-    const canopy = scene === "tree" ? 1 - smootherstep((centreRadius - 0.045) / 0.105) : 1;
-    const height = scene === "tree" ? matrix.size * (0.105 + canopy * 0.105) + seed * 0.24 * canopy : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
-    entries.push({ x, z, height, canopy, role, phase, crownScale: scene === "tree" ? 0.25 + canopy * 0.065 + seed * 0.035 : scene === "lantern" ? 0.42 + seed * 0.08 : 0.38 + seed * 0.08 });
+    const treeRadius = Math.hypot(x, z) / (matrix.size * 0.235);
+    const treeDome = Math.max(0, 1 - Math.pow(Math.min(1, treeRadius), 1.55));
+    const canopy = scene === "tree" && role !== "canopy" ? 0 : 1;
+    const height = scene === "tree" ? matrix.size * (0.255 + treeDome * 0.145) + seed * 0.42 : scene === "lantern" ? 0.38 + matrix.size * (0.025 + dome * 0.1) + (seed - 0.5) * 0.48 : 0.38 + seed * 0.3;
+    entries.push({ x, z, height, canopy, role, phase, crownScale: scene === "tree" ? 0.33 + treeDome * 0.09 + seed * 0.055 : scene === "lantern" ? 0.42 + seed * 0.08 : 0.38 + seed * 0.08 });
   }));
   return entries;
 }
@@ -259,22 +265,51 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
   const main = new THREE.MeshStandardMaterial({ color: palette.trunk, roughness: 0.9, transparent: true });
   const accent = new THREE.MeshStandardMaterial({ color: palette.glow, emissive: palette.glow, emissiveIntensity: scene === "lantern" ? 0.8 : 0.12, roughness: 0.72, transparent: true });
   if (scene === "tree") {
-    const height = size * 0.16; const trunk = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.014, size * 0.029, height, 8), main); trunk.position.y = height / 2; group.add(trunk);
-    const canopyEntries = entries.filter((entry) => entry.canopy > 0.42);
-    const stride = Math.max(1, Math.floor(canopyEntries.length / 15));
-    canopyEntries.filter((_, index) => index % stride === 0).slice(0, 15).forEach((entry) => addCylinderBetween(group, main, new THREE.Vector3(0, height * 0.62, 0), new THREE.Vector3(entry.x, entry.height - 0.18, entry.z), size * 0.0042));
+    const height = size * 0.28;
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(size * 0.05, height, size * 0.05), main); trunk.position.y = height / 2; group.add(trunk);
+    [[-0.035, 0, 0.018, 0], [0.035, 0, 0.018, 0], [0, 0, 0.035, Math.PI / 2], [0, 0, -0.035, Math.PI / 2]].forEach(([x, y, z, rotation]) => {
+      const root = new THREE.Mesh(new THREE.BoxGeometry(size * 0.088, size * 0.012, size * 0.015), main);
+      root.position.set(size * x, size * 0.008 + y, size * z); root.rotation.y = rotation; group.add(root);
+    });
+    const branchPoints: Array<[number, number, number, number, number, number, number]> = [
+      [0, .175, 0, .178, .298, .068, .021], [0, .183, 0, -.176, .31, .073, .021],
+      [0, .198, 0, .127, .346, -.129, .019], [0, .202, 0, -.137, .341, -.124, .019],
+      [0, .215, 0, .024, .393, .007, .018], [0, .227, 0, .161, .346, -.02, .015],
+      [0, .232, 0, -.154, .359, -.012, .014], [.044, .256, .017, .117, .324, .107, .01],
+      [-.041, .261, .02, -.115, .334, .102, .01], [.029, .276, -.027, .093, .361, -.105, .01],
+      [-.027, .278, -.024, -.095, .356, -.102, .01], [.01, .293, .005, .054, .378, .059, .009],
+      [-.01, .295, .002, -.056, .373, .054, .009],
+    ];
+    branchPoints.forEach(([sx, sy, sz, ex, ey, ez, width]) => addCylinderBetween(group, main, new THREE.Vector3(sx * size, sy * size, sz * size), new THREE.Vector3(ex * size, ey * size, ez * size), width * size));
+
+    const canopyEntries = entries.filter((entry) => entry.role === "canopy");
+    const leafGeometry = new THREE.BoxGeometry(0.9, 0.48, 0.9);
     const glowColor = new THREE.Color(palette.glow);
-    const leafColors = [palette.modules.canopy, palette.modules.landscape, palette.modules.roots].map((color, index) => new THREE.Color(color).lerp(glowColor, 0.66 + index * 0.06));
-    const leafMaterials = leafColors.map((color) => new THREE.MeshBasicMaterial({ color, transparent: true }));
-    for (let i = 0; i < 36; i += 1) {
-      const angle = hash2(i, 67) * Math.PI * 2;
-      const radius = Math.sqrt(hash2(i, 71)) * size * 0.087;
-      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.56 + hash2(i, 73) * 0.3, 0), leafMaterials[i % leafMaterials.length]);
-      leaf.position.set(Math.cos(angle) * radius, height + size * (0.012 + hash2(i, 79) * 0.073), Math.sin(angle) * radius);
-      leaf.scale.set(1.08 + hash2(i, 83) * 0.48, 0.72 + hash2(i, 89) * 0.34, 1.08 + hash2(i, 97) * 0.48);
-      group.add(leaf);
+    const leafPalette = [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow].map((color, index) => {
+      const leafColor = new THREE.Color(color); const hsl = { h: 0, s: 0, l: 0 }; leafColor.getHSL(hsl);
+      leafColor.setHSL(hsl.h, Math.min(1, hsl.s + 0.12), Math.min(0.72, hsl.l + 0.2 + index * 0.025));
+      return leafColor.lerp(glowColor, 0.16);
+    });
+    const leafMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+    const decorativeLeaves = new THREE.InstancedMesh(leafGeometry, leafMaterial, canopyEntries.length * 2);
+    const leafDummy = new THREE.Object3D(); let leafIndex = 0;
+    canopyEntries.forEach((entry, entryIndex) => {
+      const radius = Math.hypot(entry.x, entry.z); const dome = Math.max(0, 1 - Math.pow(radius / (size * 0.235), 1.55));
+      for (let layer = 0; layer < 2; layer += 1) {
+        const seed = hash2(entryIndex * 5 + layer, 103); const scale = 0.8 + hash2(entryIndex * 7 + layer, 107) * 0.46;
+        leafDummy.position.set(entry.x * 1.18 + (seed - 0.5) * 0.72, size * (0.255 + dome * 0.145) + layer * 0.42 + (hash2(entryIndex, layer + 109) - 0.5) * 0.46, entry.z * 1.18 + (hash2(entryIndex * 11 + layer, 113) - 0.5) * 0.72);
+        leafDummy.rotation.set((seed - 0.5) * 0.32, seed * Math.PI, (hash2(entryIndex, layer + 127) - 0.5) * 0.24);
+        leafDummy.scale.set(scale * (0.88 + seed * 0.28), scale, scale * (0.88 + hash2(entryIndex, layer + 131) * 0.28));
+        leafDummy.updateMatrix(); decorativeLeaves.setMatrixAt(leafIndex, leafDummy.matrix); decorativeLeaves.setColorAt(leafIndex, leafPalette[leafIndex % leafPalette.length]); leafIndex += 1;
+      }
+    });
+    decorativeLeaves.instanceMatrix.needsUpdate = true; if (decorativeLeaves.instanceColor) decorativeLeaves.instanceColor.needsUpdate = true; group.add(decorativeLeaves);
+
+    for (let i = 0; i < 5; i += 1) {
+      const x = [-.107, .105, .078, -.083, .02][i] * size; const y = [.27, .28, .31, .305, .335][i] * size; const z = [.068, .066, -.085, -.083, .012][i] * size;
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.001, size * 0.001, size * 0.028, 5), main); cord.position.set(x, y + size * 0.014, z); group.add(cord);
+      const lantern = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.006, size * 0.0075, size * 0.018, 8), accent); lantern.position.set(x, y, z); lantern.userData.float = i; group.add(lantern);
     }
-    for (let i = 0; i < 6; i += 1) { const light = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), accent); light.position.set(Math.sin(i * 2.1) * size * 0.055, height + (i % 3) * 0.7, Math.cos(i * 1.7) * size * 0.05); light.userData.float = i; group.add(light); }
   } else if (scene === "lantern") {
     for (let i = -4; i <= 4; i += 1) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, size * 0.18, 6), main); pole.position.set(i * size * 0.035, size * 0.09, (i % 2) * size * 0.07); group.add(pole); }
     const beam = new THREE.Mesh(new THREE.BoxGeometry(size * 0.42, 0.42, 0.58), main); beam.position.y = size * 0.19; group.add(beam);
