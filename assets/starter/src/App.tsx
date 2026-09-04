@@ -2,11 +2,11 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { MemoryTreeQr } from "./MemoryTreeQr";
 import { decodeQrImage } from "./decodeQr";
 import { loadProjectFromHash, saveProjectToHash, type MemoryProject, type SceneKind, type Season, type TimeOfDay } from "./project";
-import { getScenePalette } from "./scenePalette";
+import { getScenePalette, getTreeSeasonSuggestion } from "./scenePalette";
 
 const defaultProject: MemoryProject = {
   version: 1, payload: "https://example.com/loi-nhan", source: "text", scene: "tree", season: "autumn", time: "night",
-  palette: "amber", accent: "#d99b3d", title: "Một miền ký ức", message: "Mỗi lần quét là một lần câu chuyện được thắp sáng.",
+  palette: "amber", accent: "#e09a35", title: "Một miền ký ức", message: "Mỗi lần quét là một lần câu chuyện được thắp sáng.",
 };
 
 const scenes: Array<{ id: SceneKind; name: string; hint: string; icon: string }> = [
@@ -39,8 +39,13 @@ export function App() {
   }, []);
   const statusText = useMemo(() => project.source === "vietqr" ? `VietQR · ${bank.bankName}` : project.source === "upload" ? "QR từ ảnh trên thiết bị" : "Nội dung tùy chọn", [bank.bankName, project.source]);
   const scenePalette = useMemo(() => getScenePalette(project.scene, project.season, project.time, project.accent, project.floorColor), [project.scene, project.season, project.time, project.accent, project.floorColor]);
+  const treeSuggestion = getTreeSeasonSuggestion(project.season);
 
   function update<K extends keyof MemoryProject>(key: K, value: MemoryProject[K]) { setProject((current) => ({ ...current, [key]: value })); }
+  function chooseSeason(season: Season) {
+    const suggestion = getTreeSeasonSuggestion(season);
+    setProject((current) => ({ ...current, season, accent: current.scene === "tree" ? suggestion.accent : current.accent, floorColor: undefined }));
+  }
 
   async function readQr(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -104,7 +109,13 @@ export function App() {
       <div className="scene-grid">{scenes.map((scene) => <button key={scene.id} className={project.scene === scene.id ? "active" : ""} onClick={() => update("scene", scene.id)}><b>{scene.icon}</b><span><strong>{scene.name}</strong><small>{scene.hint}</small></span></button>)}</div>
       <div className="panel-heading panel-section"><span>03</span><div><strong>Khí sắc</strong><small>Mùa, ánh sáng và màu chủ đạo</small></div></div>
       <div className="customizer">
-        <label>Mùa<div className="segmented">{seasons.map(({id, name}) => <button key={id} className={project.season === id ? "active" : ""} onClick={() => update("season", id)}>{name}</button>)}</div></label>
+        <label>Mùa<div className="segmented">{seasons.map(({id, name}) => <button key={id} className={project.season === id ? "active" : ""} onClick={() => chooseSeason(id)}>{name}</button>)}</div></label>
+        {project.scene === "tree" && <div className="season-suggestion" aria-label={`Bảng màu gợi ý mùa ${project.season}`}>
+          <span>Bảng màu đang áp dụng</span>
+          <div><b>Cỏ</b><i>{treeSuggestion.nature.grass.map((color) => <em key={color} style={{ background: color }} title={`Màu cỏ ${color}`}/>)}</i></div>
+          <div><b>Lá</b><i>{treeSuggestion.nature.leaves.map((color) => <em key={color} style={{ background: color }} title={`Màu lá ${color}`}/>)}</i></div>
+          <div><b>Điểm nhấn</b><i><em style={{ background: treeSuggestion.accent }} title={`Màu điểm nhấn ${treeSuggestion.accent}`}/></i></div>
+        </div>}
         <label>Ánh sáng<div className="segmented two"><button className={project.time === "day" ? "active" : ""} onClick={() => update("time", "day" as TimeOfDay)}>☀ Ban ngày</button><button className={project.time === "night" ? "active" : ""} onClick={() => update("time", "night" as TimeOfDay)}>◐ Ban đêm</button></div></label>
         <label>Màu nhấn<div className="color-row"><input type="color" value={project.accent} onChange={(e) => update("accent", e.target.value)} aria-label="Chọn màu nhấn"/><span>{project.accent.toUpperCase()}</span></div></label>
         <label>Màu sàn <small>(tự giữ độ sáng để quét)</small><div className="color-row"><input type="color" value={scenePalette.floor} onChange={(e) => update("floorColor", e.target.value)} aria-label="Chọn màu sàn"/><span>{scenePalette.floor.toUpperCase()}</span><button type="button" onClick={() => update("floorColor", undefined)}>Theo mùa</button></div></label>

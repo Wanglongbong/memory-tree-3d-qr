@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { classifyDarkModule, createQrMatrix, type QrMatrix, type QrVisualRole } from "./qr";
-import type { MemoryProject, SceneKind } from "./project";
+import type { MemoryProject, SceneKind, Season, TimeOfDay } from "./project";
 import { getScenePalette, type ScenePalette } from "./scenePalette";
 
 type ViewMode = "showcase" | "scan";
@@ -13,6 +13,7 @@ type GrowthCell = {
 type GrassBlade = {
   x: number; z: number; height: number; phase: number; role: QrVisualRole;
 };
+type ParticleMotion = { base: Float32Array; speeds: Float32Array; phases: Float32Array };
 
 const sceneNames: Record<SceneKind, string> = { tree: "Cây Kí Ức", lantern: "Vườn Đèn Lồng", koi: "Hồ Koi" };
 
@@ -68,8 +69,13 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const ornamentMesh = new THREE.InstancedMesh(createOrnamentGeometry(project.scene), ornamentMaterial, entries.length);
     ornamentMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const moduleColors = Object.fromEntries((Object.keys(palette.modules) as QrVisualRole[]).map((role) => [role, new THREE.Color(palette.modules[role])])) as Record<QrVisualRole, THREE.Color>;
-    entries.forEach((entry, index) => { groundMesh.setColorAt(index, moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]); ornamentMesh.setColorAt(index, moduleColors[entry.role]); });
-    grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, moduleColors[blade.role]));
+    const grassColors = (palette.nature?.grass ?? [palette.modules.landscape, palette.modules.roots, palette.modules.canopy]).map((color) => new THREE.Color(color));
+    const leafColors = (palette.nature?.leaves ?? [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow]).map((color) => new THREE.Color(color));
+    entries.forEach((entry, index) => {
+      groundMesh.setColorAt(index, moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]);
+      ornamentMesh.setColorAt(index, project.scene === "tree" ? leafColors[Math.floor(entry.phase * leafColors.length) % leafColors.length] : moduleColors[entry.role]);
+    });
+    grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, grassColors[Math.floor(blade.phase * grassColors.length) % grassColors.length]));
     if (groundMesh.instanceColor) groundMesh.instanceColor.needsUpdate = true;
     if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
     if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
@@ -77,7 +83,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     root.add(groundMesh, grassMesh, crownMesh, ornamentMesh);
 
     const treeShadowEntries = project.scene === "tree" ? entries.filter((entry) => entry.role === "canopy") : [];
-    const treeShadowColor = new THREE.Color(palette.modules.landscape).lerp(new THREE.Color(palette.trunk), 0.36);
+    const treeShadowColor = new THREE.Color(palette.nature?.shadow ?? palette.modules.landscape).lerp(new THREE.Color(palette.trunk), 0.16);
     const treeShadowMaterial = new THREE.MeshBasicMaterial({ color: treeShadowColor, transparent: true, opacity: 0.34, depthWrite: false });
     const treeShadowMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.035, 0.9), treeShadowMaterial, treeShadowEntries.length);
     const shadowDummy = new THREE.Object3D();
@@ -94,7 +100,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const organicFloor = new THREE.Mesh(new THREE.CylinderGeometry((matrix.size + 8) * 0.7, (matrix.size + 8) * 0.73, 0.72, project.scene === "koi" ? 48 : 16), organicFloorMaterial);
     organicFloor.position.y = -0.66; root.add(organicFloor);
     const supportLayer = buildSupportLayer(project.scene, entries, palette, matrix.size); root.add(supportLayer);
-    const particles = buildParticles(project.scene, project.season === "winter" ? "#ffffff" : palette.glow, matrix.size); root.add(particles);
+    const particles = buildParticles(project.scene, project.season, project.time, palette, matrix.size); root.add(particles);
 
     const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const startsInScan = modeRef.current === "scan";
@@ -202,7 +208,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       camera.position.set(0, lookHeight + Math.sin(currentElevation) * distance, Math.max(0.001, Math.cos(currentElevation) * distance));
       cameraUp.lerpVectors(showUp, scanUp, smootherstep(scanMix)).normalize(); camera.up.copy(cameraUp);
       camera.zoom = THREE.MathUtils.lerp(project.scene === "tree" ? 1.06 : project.scene === "lantern" ? 1.1 : 1.04, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
-      if (!reducedMotion) { particles.rotation.y += delta * 0.07; animateSupportLayer(supportLayer, now, project.scene); }
+      if (!reducedMotion) { animateParticles(particles, now, delta, project.scene, project.season, matrix.size); animateSupportLayer(supportLayer, now, project.scene); }
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
     setStatus("Kéo thẳng lên để ghép lá, cỏ và bóng cây thành mã QR"); frame = requestAnimationFrame(animate);
@@ -301,12 +307,7 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
 
     const canopyEntries = entries.filter((entry) => entry.role === "canopy");
     const leafGeometry = new THREE.BoxGeometry(0.9, 0.48, 0.9);
-    const glowColor = new THREE.Color(palette.glow);
-    const leafPalette = [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow].map((color, index) => {
-      const leafColor = new THREE.Color(color); const hsl = { h: 0, s: 0, l: 0 }; leafColor.getHSL(hsl);
-      leafColor.setHSL(hsl.h, Math.min(1, hsl.s + 0.12), Math.min(0.72, hsl.l + 0.2 + index * 0.025));
-      return leafColor.lerp(glowColor, 0.16);
-    });
+    const leafPalette = (palette.nature?.leaves ?? [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow]).map((color) => new THREE.Color(color));
     const leafMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
     const decorativeLeaves = new THREE.InstancedMesh(leafGeometry, leafMaterial, canopyEntries.length * 2);
     const leafDummy = new THREE.Object3D(); let leafIndex = 0;
@@ -336,11 +337,61 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
   return group;
 }
 
-function buildParticles(scene: SceneKind, color: string, size: number) {
-  const count = scene === "koi" ? 24 : 42, positions = new Float32Array(count * 3);
-  for (let i = 0; i < count; i += 1) { positions[i * 3] = (hash2(i, 2) - 0.5) * size * 0.65; positions[i * 3 + 1] = 1 + hash2(i, 5) * size * 0.38; positions[i * 3 + 2] = (hash2(i, 8) - 0.5) * size * 0.65; }
+function buildParticles(scene: SceneKind, season: Season, time: TimeOfDay, palette: ScenePalette, size: number) {
+  const compact = window.matchMedia("(max-width: 720px)").matches;
+  const count = scene === "tree" ? (compact ? 18 : 30) : scene === "koi" ? 24 : 36;
+  const positions = new Float32Array(count * 3), colors = new Float32Array(count * 3), base = new Float32Array(count * 3);
+  const speeds = new Float32Array(count), phases = new Float32Array(count);
+  const seasonalColors = season === "autumn"
+    ? (palette.nature?.leaves ?? [palette.glow])
+    : season === "spring"
+      ? [palette.nature?.effect ?? palette.glow, "#f8d7df", palette.nature?.leaves[3] ?? "#b7d477"]
+      : season === "winter"
+        ? [palette.nature?.effect ?? "#edf6f3", "#ffffff", palette.nature?.leaves[3] ?? "#b7c7c0"]
+        : [palette.nature?.effect ?? palette.glow, "#f3e992", "#bfd36f"];
+  for (let i = 0; i < count; i += 1) {
+    const offset = i * 3;
+    positions[offset] = (hash2(i, 2) - 0.5) * size * 0.65;
+    positions[offset + 1] = (season === "summer" ? 2 : 1) + hash2(i, 5) * size * (season === "summer" ? 0.3 : 0.42);
+    positions[offset + 2] = (hash2(i, 8) - 0.5) * size * 0.65;
+    base.set(positions.subarray(offset, offset + 3), offset);
+    speeds[i] = season === "winter" ? 0.55 + hash2(i, 13) * 0.55 : season === "spring" ? 0.72 + hash2(i, 13) * 0.7 : 1.05 + hash2(i, 13) * 1.1;
+    phases[i] = hash2(i, 21) * Math.PI * 2;
+    new THREE.Color(seasonalColors[i % seasonalColors.length]).toArray(colors, offset);
+  }
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  return new THREE.Points(geometry, new THREE.PointsMaterial({ color, size: scene === "koi" ? 0.14 : 0.23, transparent: true, opacity: 0.7 }));
+  if (scene === "tree") geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const pointSize = scene === "koi" ? 0.14 : scene !== "tree" ? 0.23 : season === "spring" ? 0.32 : season === "summer" ? 0.2 : season === "autumn" ? 0.34 : 0.24;
+  const material = new THREE.PointsMaterial({ color: scene === "tree" ? 0xffffff : palette.glow, vertexColors: scene === "tree", size: pointSize, transparent: true, opacity: scene === "tree" && season === "summer" && time === "night" ? 0.9 : 0.72 });
+  const points = new THREE.Points(geometry, material);
+  points.userData.motion = { base, speeds, phases } satisfies ParticleMotion;
+  return points;
+}
+
+function animateParticles(points: THREE.Points, time: number, delta: number, scene: SceneKind, season: Season, size: number) {
+  if (scene !== "tree") { points.rotation.y += delta * 0.07; return; }
+  const attribute = points.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const positions = attribute.array as Float32Array;
+  const motion = points.userData.motion as ParticleMotion;
+  for (let i = 0; i < motion.speeds.length; i += 1) {
+    const offset = i * 3, phase = motion.phases[i];
+    if (season === "summer") {
+      positions[offset] = motion.base[offset] + Math.sin(time * 0.00055 + phase) * 0.42;
+      positions[offset + 1] = motion.base[offset + 1] + Math.sin(time * 0.0014 + phase * 1.7) * 0.5;
+      positions[offset + 2] = motion.base[offset + 2] + Math.cos(time * 0.00048 + phase) * 0.36;
+      continue;
+    }
+    positions[offset] = motion.base[offset] + Math.sin(time * 0.0007 + phase) * (season === "winter" ? 0.28 : 0.48);
+    positions[offset + 1] -= motion.speeds[i] * delta;
+    positions[offset + 2] = motion.base[offset + 2] + Math.cos(time * 0.00058 + phase) * (season === "winter" ? 0.2 : 0.34);
+    if (positions[offset + 1] < 0.35) {
+      positions[offset + 1] = size * (0.34 + hash2(i, Math.floor(time * 0.001)) * 0.12);
+      motion.base[offset] = (hash2(i, Math.floor(time * 0.0007) + 31) - 0.5) * size * 0.65;
+      motion.base[offset + 2] = (hash2(i, Math.floor(time * 0.0009) + 47) - 0.5) * size * 0.65;
+    }
+  }
+  attribute.needsUpdate = true;
+  if (season === "autumn") points.rotation.y += delta * 0.045;
 }
 
 function setLayerOpacity(group: THREE.Group, opacity: number) {

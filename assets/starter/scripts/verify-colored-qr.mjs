@@ -4,10 +4,10 @@ import { PNG } from "pngjs";
 
 const payload = "https://example.com/ky-uc/colored-round-trip?lang=vi";
 const palettes = [
-  { name: "tree-spring", floor: "#dfe8b6", colors: ["#214b32", "#3f642f", "#4f5b29", "#5b4c28"] },
-  { name: "tree-summer", floor: "#bfd79d", colors: ["#17452f", "#315d2c", "#465b24", "#514826"] },
-  { name: "tree-autumn", floor: "#e6cc91", colors: ["#52351f", "#77431f", "#5f3d22", "#765322"] },
-  { name: "tree-winter", floor: "#dbe8e6", colors: ["#24433a", "#36584a", "#4e4d37", "#4a5834"] },
+  { name: "tree-spring", floor: "#e7edc7", colors: ["#244b32", "#356239", "#4a6534", "#5b5b2f"] },
+  { name: "tree-summer", floor: "#cbe0a6", colors: ["#17452f", "#285b36", "#3b642f", "#4b5a29"] },
+  { name: "tree-autumn", floor: "#f0d49a", colors: ["#4b311d", "#6a3f1e", "#73501f", "#5e5525"] },
+  { name: "tree-winter", floor: "#dfebe9", colors: ["#29443d", "#3b5b50", "#4d6257", "#52645d"] },
   { name: "lantern", floor: "#edc28c", colors: ["#54241f", "#7a2f25", "#66401f", "#815022"] },
   { name: "koi", floor: "#a9d9d5", colors: ["#173d48", "#71352f", "#294c66", "#235d57"] },
 ];

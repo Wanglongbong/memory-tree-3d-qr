@@ -8,10 +8,45 @@ export type ScenePalette = {
   modules: Record<QrVisualRole, string>;
   trunk: string;
   glow: string;
+  nature?: TreeNaturePalette;
 };
 
+export type TreeNaturePalette = {
+  grass: readonly [string, string, string];
+  leaves: readonly [string, string, string, string];
+  shadow: string;
+  effect: string;
+};
+
+export type TreeSeasonSuggestion = {
+  accent: string;
+  floor: string;
+  nature: TreeNaturePalette;
+};
+
+const treeSeasonSuggestions: Record<Season, TreeSeasonSuggestion> = {
+  spring: {
+    accent: "#d98fa9", floor: "#e7edc7",
+    nature: { grass: ["#4f7c3e", "#6f9b4b", "#95ba60"], leaves: ["#3f7139", "#659348", "#8fb45a", "#b7d477"], shadow: "#48613a", effect: "#f2b7c6" },
+  },
+  summer: {
+    accent: "#d8cc63", floor: "#cbe0a6",
+    nature: { grass: ["#315f3a", "#467b45", "#64964f"], leaves: ["#245737", "#397044", "#52884c", "#78a65c"], shadow: "#31523a", effect: "#e6d86b" },
+  },
+  autumn: {
+    accent: "#e09a35", floor: "#f0d49a",
+    nature: { grass: ["#7c5727", "#9a6a2a", "#b47e31"], leaves: ["#8e4d22", "#b56524", "#d3812c", "#e6ae42"], shadow: "#6a4b26", effect: "#e49a32" },
+  },
+  winter: {
+    accent: "#c8dbe0", floor: "#dfebe9",
+    nature: { grass: ["#5b7168", "#748a80", "#94a69e"], leaves: ["#49645a", "#687f74", "#8fa299", "#b7c7c0"], shadow: "#52655d", effect: "#edf6f3" },
+  },
+};
+
+export function getTreeSeasonSuggestion(season: Season) { return treeSeasonSuggestions[season]; }
+
 const seasonalFloor: Record<SceneKind, Record<Season, string>> = {
-  tree: { spring: "#dfe8b6", summer: "#bfd79d", autumn: "#e6cc91", winter: "#dbe8e6" },
+  tree: { spring: "#e7edc7", summer: "#cbe0a6", autumn: "#f0d49a", winter: "#dfebe9" },
   lantern: { spring: "#f0c6a7", summer: "#e6d39a", autumn: "#edc28c", winter: "#d9ddd2" },
   koi: { spring: "#c5dcce", summer: "#a9d9d5", autumn: "#c8d4b4", winter: "#cadfe2" },
 };
@@ -23,10 +58,10 @@ const roleBases: Record<SceneKind, Record<QrVisualRole, string>> = {
 };
 
 const treeSeasonBases: Record<Season, Record<QrVisualRole, string>> = {
-  spring: { protected: "#214b32", canopy: "#3f642f", roots: "#4f5b29", landscape: "#5b4c28" },
-  summer: { protected: "#17452f", canopy: "#315d2c", roots: "#465b24", landscape: "#514826" },
-  autumn: { protected: "#52351f", canopy: "#77431f", roots: "#5f3d22", landscape: "#765322" },
-  winter: { protected: "#24433a", canopy: "#36584a", roots: "#4e4d37", landscape: "#4a5834" },
+  spring: { protected: "#244b32", canopy: "#356239", roots: "#4a6534", landscape: "#5b5b2f" },
+  summer: { protected: "#17452f", canopy: "#285b36", roots: "#3b642f", landscape: "#4b5a29" },
+  autumn: { protected: "#4b311d", canopy: "#6a3f1e", roots: "#73501f", landscape: "#5e5525" },
+  winter: { protected: "#29443d", canopy: "#3b5b50", roots: "#4d6257", landscape: "#52645d" },
 };
 
 export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDay, accentHex: string, floorHex?: string): ScenePalette {
@@ -35,7 +70,7 @@ export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDa
   const bases = scene === "tree" ? treeSeasonBases[season] : roleBases[scene];
   const modules = Object.fromEntries((Object.keys(bases) as QrVisualRole[]).map((role, index) => {
     const base = new THREE.Color(bases[role]);
-    if (role !== "protected") base.lerp(accent, scene === "tree" ? 0.1 + index * 0.025 : 0.08 + index * 0.018);
+    if (role !== "protected") base.lerp(accent, scene === "tree" ? 0.025 + index * 0.008 : 0.08 + index * 0.018);
     return [role, `#${ensureContrast(base, floor, 4.5).getHexString()}`];
   })) as Record<QrVisualRole, string>;
   const showFloor = floor.clone().lerp(new THREE.Color(scene === "koi" ? "#17373c" : "#2b2118"), time === "night" ? 0.55 : 0.2);
@@ -45,6 +80,7 @@ export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDa
     modules,
     trunk: scene === "tree" ? "#603c2c" : scene === "lantern" ? "#4d3225" : "#315f5c",
     glow: `#${accent.getHexString()}`,
+    nature: scene === "tree" ? treeSeasonSuggestions[season].nature : undefined,
   };
 }
 
