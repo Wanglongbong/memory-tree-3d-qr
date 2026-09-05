@@ -3,7 +3,18 @@ import { sourceModule } from "./source-module.mjs";
 
 const { createQrMatrix } = await sourceModule("src/qr.ts");
 const { getScenePalette } = await sourceModule("src/scenePalette.ts");
-const { createGrowthCells, createTieredCanopy, createGrassBlades, buildFallingLeaves, animateFallingLeaves } = await sourceModule("src/MemoryTreeQr.tsx");
+const { createGrowthCells, createTieredCanopy, createGrassBlades, createGrassGeometry, buildFallingLeaves, animateFallingLeaves } = await sourceModule("src/MemoryTreeQr.tsx");
+const grassGeometry = createGrassGeometry();
+const positions = grassGeometry.getAttribute("position");
+assert.equal(positions.count, 24, "Blender folded blade is lightweight");
+assert.equal(grassGeometry.index.count / 3, 28);
+for (let i = 0; i < positions.count; i++) {
+  assert(positions.getY(i) >= 0 && positions.getY(i) <= 1);
+  // Rotate any direction: geometry + maximum combined wind + root offset remains within the cell.
+  assert(Math.hypot(positions.getX(i), positions.getZ(i)) + Math.hypot(0.115, 0.065) + Math.SQRT2 * 0.2 < 0.5);
+}
+assert(grassGeometry.getAttribute("normal").array.every(Number.isFinite));
+grassGeometry.dispose();
 globalThis.window = { innerWidth: 1440 };
 for (const matrix of [createQrMatrix("https://example.com/memory-tree-test"), { size: 177, modules: Array.from({ length: 177 }, (_, r) => Array.from({ length: 177 }, (_, c) => (r + c) % 3 !== 0)) }]) {
   const entries = createGrowthCells(matrix, "tree");
@@ -22,7 +33,7 @@ for (const matrix of [createQrMatrix("https://example.com/memory-tree-test"), { 
     const blades = createGrassBlades(entries, matrix.size);
     assert(blades.some((blade) => blade.splayed));
     for (const blade of blades) {
-      assert(blade.height >= 1.98 && blade.height <= 4.85);
+      assert(blade.height >= 0.58 && blade.height <= 1.55, "Meadow grass stays much lower than the old 1.99–4.85 range");
       if (blade.role === "protected") assert(!blade.splayed, "Finder and alignment structures cannot splay");
       // Root offset .20 + max core wind .16/.08 + blade radius .06 < half a cell.
       assert(Math.abs(blade.x - Math.round(blade.x)) + 0.16 + 0.06 < 0.5);

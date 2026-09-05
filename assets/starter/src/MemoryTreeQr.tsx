@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { classifyDarkModule, createQrMatrix, unpackQrMatrix, type QrMatrix, type QrVisualRole } from "./qr";
 import type { MemoryProject, SceneKind, Season, TimeOfDay } from "./project";
 import { getScenePalette, type ScenePalette } from "./scenePalette";
+import grassBladeAsset from "./assets/grass-blade.json";
 
 type ViewMode = "showcase" | "scan";
 type Props = { project: MemoryProject; onShare: () => void; shareLabel: string };
@@ -61,29 +62,33 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const grassBlades = project.scene === "tree" ? createGrassBlades(entries, matrix.size) : [];
-    const grassGeometry = new THREE.ConeGeometry(0.06, 1, 3, 5); grassGeometry.translate(0, 0.5, 0);
-    const grassMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+    const grassGeometry = createGrassGeometry();
+    const grassMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide });
     // Splayed blades fade with camera elevation; upright cores never leave their cell.
     const grassTime = { value: 0 }, grassWind = { value: 0 }, grassSplay = { value: 1 };
     grassGeometry.setAttribute("splayed", new THREE.InstancedBufferAttribute(new Float32Array(grassBlades.map((blade) => Number(blade.splayed))), 1));
     grassMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.grassTime = grassTime; shader.uniforms.grassWind = grassWind; shader.uniforms.grassSplay = grassSplay;
-      shader.vertexShader = `attribute float splayed; uniform float grassTime; uniform float grassWind; varying float bladeTip; varying float bladeSplayed;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `
+      shader.vertexShader = `attribute float splayed; uniform float grassTime; uniform float grassWind; varying float bladeTip; varying float bladeSplayed; varying float bladeFold;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `
         #include <begin_vertex>
         bladeTip = position.y;
         bladeSplayed = splayed;
+        bladeFold = normal.z;
         float phase = instanceMatrix[3].x * 2.3 + instanceMatrix[3].z * 1.7;
         float moving = step(0.0, instanceMatrix[3].y - 0.115);
-        float bend = pow(position.y, 1.7) * grassWind * moving;
-        transformed.x += sin(grassTime * 1.6 + phase) * 0.16 * bend;
-        transformed.z += sin(grassTime * 1.1 + phase * 0.7) * 0.08 * bend;
-        transformed.x += pow(position.y, 1.6) * splayed * (0.65 + 0.3 * sin(phase));
+        float bend = pow(position.y, 2.0) * grassWind * moving;
+        // Broad slow gusts travel through neighboring tufts; fine flutter is tip-only.
+        float wave = sin(grassTime * 0.85 - instanceMatrix[3].x * 0.22 - instanceMatrix[3].z * 0.16);
+        float flutter = sin(grassTime * 1.75 + phase);
+        transformed.x += (wave * 0.09 + flutter * 0.025 * position.y) * bend;
+        transformed.z += sin(grassTime * 0.65 + phase * 0.4) * 0.065 * bend;
+        transformed.x += pow(position.y, 1.8) * splayed * (0.30 + 0.23 * sin(phase));
       `);
-      shader.fragmentShader = `uniform float grassSplay; varying float bladeTip; varying float bladeSplayed;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
+      shader.fragmentShader = `uniform float grassSplay; varying float bladeTip; varying float bladeSplayed; varying float bladeFold;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
         #include <color_fragment>
         diffuseColor.a *= mix(1.0, grassSplay, bladeSplayed);
         if (diffuseColor.a < 0.015) discard;
-        diffuseColor.rgb *= mix(0.76, 1.0, smoothstep(0.0, 0.85, bladeTip));
+        diffuseColor.rgb *= mix(0.68, 1.04, smoothstep(0.0, 0.95, bladeTip)) * (0.95 + 0.05 * abs(bladeFold));
         ${project.season === "winter" ? "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.77, 0.82), smoothstep(0.91, 1.0, bladeTip) * 0.65);" : ""}
       `);
     };
@@ -239,7 +244,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       if (Math.abs(scanMix - desiredMix) < 0.0001) scanMix = desiredMix;
       const growthProgress = activeMode === "scan" ? 1 : THREE.MathUtils.clamp((now - bornAt) / 1900, 0, 1);
       const windStrength = reducedMotion ? 0 : 1 - smootherstep(scanMix);
-      grassTime.value = now * 0.001; grassWind.value = reducedMotion ? 0 : THREE.MathUtils.lerp(1, 0.85, smootherstep(scanMix));
+      grassTime.value = now * 0.001; grassWind.value = reducedMotion ? 0 : THREE.MathUtils.lerp(1, 0.35, smootherstep(scanMix));
       grassSplay.value = 1 - smootherstep((currentElevation - THREE.MathUtils.degToRad(65)) / THREE.MathUtils.degToRad(23));
       if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && Math.abs(scanMix - previousMix) > 0.001)) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
@@ -320,7 +325,7 @@ export function createGrassBlades(entries: GrowthCell[], size: number): GrassBla
       blades.push({
         x: entry.x + (seedX - 0.5) * 0.4,
         z: entry.z + (seedZ - 0.5) * 0.4,
-        height: (0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12) * 2.55,
+        height: 0.58 + hash2(cellIndex * 13 + bladeIndex, 41) * 0.97,
         phase: hash2(cellIndex * 19 + bladeIndex, 53),
         role: entry.role,
         splayed: bladeIndex >= coreCount,
@@ -328,6 +333,14 @@ export function createGrassBlades(entries: GrowthCell[], size: number): GrassBla
     }
   });
   return blades;
+}
+
+export function createGrassGeometry() {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(grassBladeAsset.positions, 3));
+  geometry.setIndex(grassBladeAsset.indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function createOrnamentGeometry(scene: SceneKind) {
