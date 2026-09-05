@@ -9,5 +9,6 @@ npm install
 npm run verify:qr
 npm run verify:import
 npm run verify:colored
+npm run verify:nature
 npm run check
 npm run build

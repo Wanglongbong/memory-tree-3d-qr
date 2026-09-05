@@ -9,7 +9,8 @@
     "check": "tsc -b --pretty false",
     "verify:qr": "node scripts/verify-qr.mjs",
     "verify:import": "node scripts/verify-import.mjs",
-    "verify:colored": "node scripts/verify-colored-qr.mjs"
+    "verify:colored": "node scripts/verify-colored-qr.mjs",
+    "verify:nature": "node scripts/verify-nature.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

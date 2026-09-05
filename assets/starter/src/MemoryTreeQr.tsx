@@ -11,8 +11,10 @@ type GrowthCell = {
   role: QrVisualRole; phase: number; crownScale: number;
 };
 type GrassBlade = {
-  x: number; z: number; height: number; phase: number; role: QrVisualRole;
+  x: number; z: number; height: number; phase: number; role: QrVisualRole; splayed: boolean;
 };
+const TREE_HEIGHT = 1.8;
+const CANOPY_TIERS = [{ width: 1, level: 0.6 }, { width: 0.78, level: 0.8 }, { width: 0.55, level: 1 }];
 type ParticleMotion = { base: Float32Array; speeds: Float32Array; phases: Float32Array };
 
 const sceneNames: Record<SceneKind, string> = { tree: "Cây Kí Ức", lantern: "Vườn Đèn Lồng", koi: "Hồ Koi" };
@@ -46,7 +48,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     container.replaceChildren(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 400);
+    const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, matrix.size * 4 + 100);
     const root = new THREE.Group(); scene.add(root);
     const night = project.time === "night";
     scene.add(new THREE.HemisphereLight(night ? 0xa7b9dd : 0xffe9bb, night ? 0x151b24 : 0x59412a, night ? 1.5 : 2.4));
@@ -54,28 +56,33 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const glow = new THREE.PointLight(palette.glow, night ? 24 : 10, matrix.size * 1.4); glow.position.set(0, matrix.size * 0.26, 0); scene.add(glow);
 
     const entries = createGrowthCells(matrix, project.scene);
+    const crowns = project.scene === "tree" ? createTieredCanopy(entries, matrix.size) : entries;
     const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const grassBlades = project.scene === "tree" ? createGrassBlades(entries, matrix.size) : [];
     const grassGeometry = new THREE.ConeGeometry(0.06, 1, 3, 5); grassGeometry.translate(0, 0.5, 0);
-    const grassMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    // Bend blade tips on the GPU, never the roots. World-space displacement stays
-    // inside each QR cell, including in the top view and for dense 177×177 codes.
-    const grassTime = { value: 0 }, grassWind = { value: 0 };
+    const grassMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+    // Splayed blades fade with camera elevation; upright cores never leave their cell.
+    const grassTime = { value: 0 }, grassWind = { value: 0 }, grassSplay = { value: 1 };
+    grassGeometry.setAttribute("splayed", new THREE.InstancedBufferAttribute(new Float32Array(grassBlades.map((blade) => Number(blade.splayed))), 1));
     grassMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.grassTime = grassTime; shader.uniforms.grassWind = grassWind;
-      shader.vertexShader = `uniform float grassTime; uniform float grassWind; varying float bladeTip;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `
+      shader.uniforms.grassTime = grassTime; shader.uniforms.grassWind = grassWind; shader.uniforms.grassSplay = grassSplay;
+      shader.vertexShader = `attribute float splayed; uniform float grassTime; uniform float grassWind; varying float bladeTip; varying float bladeSplayed;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `
         #include <begin_vertex>
         bladeTip = position.y;
+        bladeSplayed = splayed;
         float phase = instanceMatrix[3].x * 2.3 + instanceMatrix[3].z * 1.7;
         float moving = step(0.0, instanceMatrix[3].y - 0.115);
         float bend = pow(position.y, 1.7) * grassWind * moving;
         transformed.x += sin(grassTime * 1.6 + phase) * 0.16 * bend;
         transformed.z += sin(grassTime * 1.1 + phase * 0.7) * 0.08 * bend;
+        transformed.x += pow(position.y, 1.6) * splayed * (0.65 + 0.3 * sin(phase));
       `);
-      shader.fragmentShader = `varying float bladeTip;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
+      shader.fragmentShader = `uniform float grassSplay; varying float bladeTip; varying float bladeSplayed;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
         #include <color_fragment>
+        diffuseColor.a *= mix(1.0, grassSplay, bladeSplayed);
+        if (diffuseColor.a < 0.015) discard;
         diffuseColor.rgb *= mix(0.76, 1.0, smoothstep(0.0, 0.85, bladeTip));
         ${project.season === "winter" ? "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.77, 0.82), smoothstep(0.91, 1.0, bladeTip) * 0.65);" : ""}
       `);
@@ -83,16 +90,19 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassBlades.length);
     grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const crownMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: project.scene === "tree" });
-    const crownMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), crownMaterial, entries.length);
+    const crownMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), crownMaterial, crowns.length);
     crownMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const ornamentMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: project.scene === "tree", roughness: 0.78, flatShading: project.scene !== "koi" });
-    const ornamentMesh = new THREE.InstancedMesh(createOrnamentGeometry(project.scene), ornamentMaterial, entries.length);
+    const ornamentMesh = new THREE.InstancedMesh(createOrnamentGeometry(project.scene), ornamentMaterial, crowns.length);
     ornamentMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const moduleColors = Object.fromEntries((Object.keys(palette.modules) as QrVisualRole[]).map((role) => [role, new THREE.Color(palette.modules[role])])) as Record<QrVisualRole, THREE.Color>;
     const grassColors = (palette.nature?.grass ?? [palette.modules.landscape, palette.modules.roots, palette.modules.canopy]).map((color) => new THREE.Color(color));
     const leafColors = (palette.nature?.leaves ?? [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow]).map((color) => new THREE.Color(color));
     entries.forEach((entry, index) => {
-      groundMesh.setColorAt(index, project.scene === "tree" && entry.role === "canopy" ? new THREE.Color(palette.nature!.shadow) : moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]);
+      groundMesh.setColorAt(index, project.scene === "tree" && entry.role === "canopy" ? new THREE.Color(palette.nature!.shadow) : moduleColors[entry.role]);
+    });
+    crowns.forEach((entry, index) => {
+      crownMesh.setColorAt(index, moduleColors[entry.role]);
       ornamentMesh.setColorAt(index, project.scene === "tree" ? leafColors[Math.floor(entry.phase * leafColors.length) % leafColors.length] : moduleColors[entry.role]);
     });
     grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, blade.role === "protected" ? moduleColors.protected : grassColors[Math.floor(blade.phase * grassColors.length) % grassColors.length]));
@@ -119,10 +129,14 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const organicFloorMaterial = new THREE.MeshStandardMaterial({ color: palette.showcaseFloor, transparent: true, roughness: project.scene === "koi" ? 0.3 : 0.92, metalness: project.scene === "koi" ? 0.08 : 0 });
     const organicFloor = new THREE.Mesh(project.scene === "tree" ? new THREE.BoxGeometry(matrix.size + 8, 1.1, matrix.size + 8) : new THREE.CylinderGeometry((matrix.size + 8) * 0.7, (matrix.size + 8) * 0.73, 0.72, project.scene === "koi" ? 48 : 16), organicFloorMaterial);
     organicFloor.position.y = -0.66; root.add(organicFloor);
-    const supportLayer = buildSupportLayer(project.scene, entries, palette, matrix.size); root.add(supportLayer);
+    const supportLayer = buildSupportLayer(project.scene, crowns, palette, matrix.size); root.add(supportLayer);
     const particles = buildParticles(project.scene, project.season, project.time, palette, matrix.size); root.add(particles);
+    const particleOpacity = (particles.material as THREE.PointsMaterial).opacity;
 
     const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const fallingLeaves = project.scene === "tree" && !reducedMotion ? buildFallingLeaves(crowns, palette, matrix.size) : null;
+    if (fallingLeaves) root.add(fallingLeaves);
+    if (reducedMotion) particles.visible = false;
     const startsInScan = modeRef.current === "scan";
     let targetYaw = startsInScan ? 0 : -0.48, currentYaw = targetYaw;
     let targetElevation = startsInScan ? Math.PI / 2 : project.scene === "tree" ? 0.43 : project.scene === "lantern" ? 0.52 : 0.68, currentElevation = targetElevation;
@@ -160,7 +174,9 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
         const groundWidth = (entry.role === "protected" ? 1 : 0.96) * local;
         cellScale.set(Math.max(0.001, groundWidth), Math.max(0.001, 0.16 * local), Math.max(0.001, groundWidth));
         dummy.position.set(entry.x, 0.08 * local, entry.z); dummy.rotation.set(0, 0, 0); dummy.scale.copy(cellScale); dummy.updateMatrix(); groundMesh.setMatrixAt(index, dummy.matrix);
-
+      });
+      crowns.forEach((entry, index) => {
+        const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.22 - entry.phase * 0.22, 0, 1));
         const crownY = THREE.MathUtils.lerp(0.2, entry.height, local);
         const crownWidth = 0.96 * local * entry.canopy;
         cellScale.set(Math.max(0.001, crownWidth), Math.max(0.001, 0.2 * local), Math.max(0.001, crownWidth));
@@ -194,7 +210,12 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
         ornamentMaterial.opacity = 1 - qrAlignment; ornamentMaterial.depthWrite = false; ornamentMesh.visible = qrAlignment < 0.999;
         treeShadowMaterial.opacity = 0.34;
       }
-      particles.visible = mix < 0.62; particles.scale.setScalar(Math.max(0.001, 1 - mix));
+      particles.visible = !reducedMotion && mix < 0.62;
+      (particles.material as THREE.PointsMaterial).opacity = particleOpacity * (1 - smootherstep(mix / 0.62));
+      if (fallingLeaves) {
+        fallingLeaves.visible = mix < 0.62;
+        fallingLeaves.material.opacity = 1 - smootherstep(mix / 0.62);
+      }
     }
 
     updateGrowth(startsInScan ? 1 : 0, bornAt, 0);
@@ -219,16 +240,18 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       const growthProgress = activeMode === "scan" ? 1 : THREE.MathUtils.clamp((now - bornAt) / 1900, 0, 1);
       const windStrength = reducedMotion ? 0 : 1 - smootherstep(scanMix);
       grassTime.value = now * 0.001; grassWind.value = reducedMotion ? 0 : THREE.MathUtils.lerp(1, 0.85, smootherstep(scanMix));
+      grassSplay.value = 1 - smootherstep((currentElevation - THREE.MathUtils.degToRad(65)) / THREE.MathUtils.degToRad(23));
       if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && Math.abs(scanMix - previousMix) > 0.001)) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
       if (!reducedMotion && !dragging && activeMode === "showcase" && scanMix < 0.12) targetYaw += delta * 0.045;
       root.rotation.y = currentYaw * (1 - smootherstep(scanMix));
-      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.145 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
+      const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.255 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
       camera.position.set(0, lookHeight + Math.sin(currentElevation) * distance, Math.max(0.001, Math.cos(currentElevation) * distance));
       cameraUp.lerpVectors(showUp, scanUp, smootherstep(scanMix)).normalize(); camera.up.copy(cameraUp);
-      const showcaseZoom = project.scene === "tree" ? Math.min(1.06, (camera.right - camera.left) / (Math.SQRT2 * (matrix.size + 8) + 2)) : project.scene === "lantern" ? 1.1 : 1.04;
+      const showcaseZoom = project.scene === "tree" ? Math.min(1.06, (camera.right - camera.left) / (Math.SQRT2 * (matrix.size + 8) + 2), (camera.top - camera.bottom) / (matrix.size * 1.1 + 8)) : project.scene === "lantern" ? 1.1 : 1.04;
       camera.zoom = THREE.MathUtils.lerp(showcaseZoom, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
       if (!reducedMotion) { animateParticles(particles, now, delta, project.scene, project.season, matrix.size); animateSupportLayer(supportLayer, now, project.scene); }
+      if (fallingLeaves?.visible) animateFallingLeaves(fallingLeaves, (now - bornAt) * 0.001, matrix.size);
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
     setStatus("Kéo thẳng lên để ghép lá, cỏ và bóng cây thành mã QR"); frame = requestAnimationFrame(animate);
@@ -258,11 +281,11 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     <div className="memory-stage" data-mode={mode} style={{ "--scan-floor": palette.floor } as CSSProperties}><div ref={mountRef} className="memory-render"/><div className="world-label"><small>{project.season.toUpperCase()} · {project.time === "night" ? "NIGHT" : "DAY"}</small><strong>{sceneNames[project.scene]}</strong><span>{mode === "scan" ? "Cỏ và đỉnh lá thật đang tạo thành mã QR" : status}</span></div><div className="scan-corners" aria-hidden="true"><i/><i/><i/><i/></div></div>
     <div className="preview-info"><div><small>TÁC PHẨM ĐANG GIEO</small><strong>{project.title}</strong><p>{project.message}</p></div><span className="payload-chip">{project.source === "vietqr" ? "VIETQR" : project.source === "upload" ? "QR ẢNH" : "QR TÙY CHỌN"}</span></div>
     <div className="export-row"><button onClick={() => void downloadQr(false)}><span>↓</span><b>Tải PNG</b><small>1600 px · QR đa sắc</small></button><button onClick={() => void downloadQr(true)}><span>✦</span><b>Tải HD</b><small>3200 px · không watermark</small></button><button onClick={onShare}><span>↗</span><b>{shareLabel}</b><small>Không cần đăng nhập</small></button></div>
-    <p className="security-line">⌾ Mỗi ô tối gieo một ô cỏ; tán lá mọc đúng trên cùng tọa độ và không lấn sang ô sáng.</p>
+    <p className="security-line">⌾ Cỏ xòe khi nhìn nghiêng; từ trên cao, ngọn cỏ và tán lá ghép đúng từng ô mã QR.</p>
   </article>;
 }
 
-function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
+export function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
   const entries: GrowthCell[] = []; const centre = (matrix.size - 1) / 2;
   matrix.modules.forEach((row, r) => row.forEach((dark, c) => {
     if (!dark) return;
@@ -278,11 +301,19 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
   return entries;
 }
 
-function createGrassBlades(entries: GrowthCell[], size: number): GrassBlade[] {
+export function createTieredCanopy(entries: GrowthCell[], size: number): GrowthCell[] {
+  return CANOPY_TIERS.flatMap((tier) => entries.filter((entry) => entry.canopy && Math.hypot(entry.x, entry.z) <= size * 0.235 * tier.width).map((entry) => {
+    const dome = Math.max(0, 1 - Math.pow(Math.hypot(entry.x, entry.z) / (size * 0.235 * tier.width), 1.55));
+    return { ...entry, height: size * 0.4 * TREE_HEIGHT * (tier.level - 0.13 + dome * 0.13) + entry.phase * 0.35 };
+  }));
+}
+
+export function createGrassBlades(entries: GrowthCell[], size: number): GrassBlade[] {
   const blades: GrassBlade[] = [];
   entries.forEach((entry, cellIndex) => {
     if (entry.canopy > 0.42) return;
-    const count = size > 105 ? 3 : window.innerWidth <= 720 ? 5 : 9;
+    const coreCount = size > 105 ? 3 : 5;
+    const count = entry.role === "protected" ? coreCount : coreCount + (size > 105 ? 2 : window.innerWidth <= 720 ? 3 : 5);
     for (let bladeIndex = 0; bladeIndex < count; bladeIndex += 1) {
       const seedX = hash2(cellIndex * 7 + bladeIndex, 17);
       const seedZ = hash2(cellIndex * 11 + bladeIndex, 29);
@@ -292,6 +323,7 @@ function createGrassBlades(entries: GrowthCell[], size: number): GrassBlade[] {
         height: (0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12) * 2.55,
         phase: hash2(cellIndex * 19 + bladeIndex, 53),
         role: entry.role,
+        splayed: bladeIndex >= coreCount,
       });
     }
   });
@@ -309,7 +341,7 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
   const main = new THREE.MeshStandardMaterial({ color: palette.trunk, roughness: 0.9, transparent: true });
   const accent = new THREE.MeshStandardMaterial({ color: palette.glow, emissive: palette.glow, emissiveIntensity: scene === "lantern" ? 0.8 : 0.12, roughness: 0.72, transparent: true });
   if (scene === "tree") {
-    const height = size * 0.28;
+    const height = size * 0.37 * TREE_HEIGHT;
     const trunk = new THREE.Mesh(new THREE.BoxGeometry(size * 0.05, height, size * 0.05), main); trunk.position.y = height / 2; group.add(trunk);
     [[-0.035, 0, 0.018, 0], [0.035, 0, 0.018, 0], [0, 0, 0.035, Math.PI / 2], [0, 0, -0.035, Math.PI / 2]].forEach(([x, y, z, rotation]) => {
       const root = new THREE.Mesh(new THREE.BoxGeometry(size * 0.088, size * 0.012, size * 0.015), main);
@@ -324,7 +356,10 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
       [-.027, .278, -.024, -.095, .356, -.102, .01], [.01, .293, .005, .054, .378, .059, .009],
       [-.01, .295, .002, -.056, .373, .054, .009],
     ];
-    branchPoints.forEach(([sx, sy, sz, ex, ey, ez, width]) => addCylinderBetween(group, main, new THREE.Vector3(sx * size, sy * size, sz * size), new THREE.Vector3(ex * size, ey * size, ez * size), width * size));
+    CANOPY_TIERS.forEach((tier) => branchPoints.forEach(([sx, sy, sz, ex, ey, ez, width]) => {
+      const tierY = (y: number) => size * 0.4 * TREE_HEIGHT * (tier.level - 0.13 + ((y - 0.255) / 0.145) * 0.13);
+      addCylinderBetween(group, main, new THREE.Vector3(sx * size * tier.width, tierY(sy), sz * size * tier.width), new THREE.Vector3(ex * size * tier.width, tierY(ey), ez * size * tier.width), width * size * tier.width * 0.7);
+    }));
 
     const canopyEntries = entries.filter((entry) => entry.role === "canopy");
     const leafGeometry = new THREE.BoxGeometry(0.9, 0.48, 0.9);
@@ -333,10 +368,9 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
     const decorativeLeaves = new THREE.InstancedMesh(leafGeometry, leafMaterial, canopyEntries.length * 2);
     const leafDummy = new THREE.Object3D(); let leafIndex = 0;
     canopyEntries.forEach((entry, entryIndex) => {
-      const radius = Math.hypot(entry.x, entry.z); const dome = Math.max(0, 1 - Math.pow(radius / (size * 0.235), 1.55));
       for (let layer = 0; layer < 2; layer += 1) {
         const seed = hash2(entryIndex * 5 + layer, 103); const scale = 0.8 + hash2(entryIndex * 7 + layer, 107) * 0.46;
-        leafDummy.position.set(entry.x * 1.18 + (seed - 0.5) * 0.72, size * (0.255 + dome * 0.145) + layer * 0.42 + (hash2(entryIndex, layer + 109) - 0.5) * 0.46, entry.z * 1.18 + (hash2(entryIndex * 11 + layer, 113) - 0.5) * 0.72);
+        leafDummy.position.set(entry.x * 1.18 + (seed - 0.5) * 0.72, entry.height + layer * 0.42 + (hash2(entryIndex, layer + 109) - 0.5) * 0.46, entry.z * 1.18 + (hash2(entryIndex * 11 + layer, 113) - 0.5) * 0.72);
         leafDummy.rotation.set((seed - 0.5) * 0.32, seed * Math.PI, (hash2(entryIndex, layer + 127) - 0.5) * 0.24);
         leafDummy.scale.set(scale * (0.88 + seed * 0.28), scale, scale * (0.88 + hash2(entryIndex, layer + 131) * 0.28));
         leafDummy.updateMatrix(); decorativeLeaves.setMatrixAt(leafIndex, leafDummy.matrix); decorativeLeaves.setColorAt(leafIndex, leafPalette[leafIndex % leafPalette.length]); leafIndex += 1;
@@ -345,7 +379,7 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
     decorativeLeaves.instanceMatrix.needsUpdate = true; if (decorativeLeaves.instanceColor) decorativeLeaves.instanceColor.needsUpdate = true; group.add(decorativeLeaves);
 
     for (let i = 0; i < 5; i += 1) {
-      const x = [-.107, .105, .078, -.083, .02][i] * size; const y = [.27, .28, .31, .305, .335][i] * size; const z = [.068, .066, -.085, -.083, .012][i] * size;
+      const x = [-.107, .105, .078, -.083, .02][i] * size; const y = [.32, .33, .43, .44, .57][i] * size; const z = [.068, .066, -.085, -.083, .012][i] * size;
       const cord = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.001, size * 0.001, size * 0.028, 5), main); cord.position.set(x, y + size * 0.014, z); group.add(cord);
       const lantern = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.006, size * 0.0075, size * 0.018, 8), accent); lantern.position.set(x, y, z); lantern.userData.float = i; group.add(lantern);
     }
@@ -356,6 +390,43 @@ function buildSupportLayer(scene: SceneKind, entries: GrowthCell[], palette: Sce
     for (let i = 0; i < 7; i += 1) { const fish = new THREE.Group(); const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 7), i % 2 ? accent : main); body.scale.set(1.7, 0.4, 0.65); fish.add(body); const tail = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.75, 3), i % 2 ? accent : main); tail.rotation.z = Math.PI / 2; tail.position.x = -0.9; fish.add(tail); fish.position.set(Math.sin(i * 2.2) * size * 0.18, 0.1, Math.cos(i * 1.55) * size * 0.18); fish.rotation.y = i * 0.8; fish.userData.swim = i; group.add(fish); }
   }
   return group;
+}
+
+export function buildFallingLeaves(crowns: GrowthCell[], palette: ScenePalette, size: number) {
+  const count = crowns.length ? size > 105 ? 40 : window.innerWidth <= 720 ? 60 : 120 : 0;
+  const geometry = new THREE.OctahedronGeometry(0.5, 0); geometry.scale(0.55, 0.08, 1);
+  geometry.setAttribute("leafOpacity", new THREE.InstancedBufferAttribute(new Float32Array(count), 1).setUsage(THREE.DynamicDrawUsage));
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `attribute float leafOpacity; varying float fallingOpacity;\n${shader.vertexShader}`.replace("#include <begin_vertex>", "#include <begin_vertex>\nfallingOpacity = leafOpacity;");
+    shader.fragmentShader = `varying float fallingOpacity;\n${shader.fragmentShader}`.replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.a *= fallingOpacity;");
+  };
+  const mesh = new THREE.InstancedMesh(geometry, material, count);
+  mesh.name = "falling-canopy-leaves"; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // Animated instances may drift outside their initial bounds.
+  mesh.frustumCulled = false;
+  mesh.userData.origins = Array.from({ length: count }, (_, i) => crowns[Math.floor(hash2(i, 191) * crowns.length)]);
+  const colors = palette.nature!.leaves.map((color) => new THREE.Color(color));
+  for (let i = 0; i < count; i++) mesh.setColorAt(i, colors[i % colors.length]);
+  mesh.userData.dummy = new THREE.Object3D();
+  return mesh;
+}
+
+export function animateFallingLeaves(mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>, time: number, size: number) {
+  const origins = mesh.userData.origins as GrowthCell[];
+  const dummy = mesh.userData.dummy as THREE.Object3D;
+  const opacity = mesh.geometry.getAttribute("leafOpacity") as THREE.InstancedBufferAttribute;
+  origins.forEach((origin, i) => {
+    const duration = 9 + hash2(i, 197) * 9;
+    const progress = (time / duration + hash2(i, 199)) % 1;
+    const phase = hash2(i, 211) * Math.PI * 2;
+    const drift = size * 0.055 * progress;
+    dummy.position.set(origin.x * 1.18 + Math.sin(time * 0.8 + phase) * 0.65 + Math.cos(phase) * drift, THREE.MathUtils.lerp(origin.height, 0.3, progress), origin.z * 1.18 + Math.cos(time * 0.65 + phase) * 0.5 + Math.sin(phase) * drift);
+    dummy.rotation.set(time * (0.8 + hash2(i, 223)) + phase, phase + time * 0.35, Math.sin(time * 1.4 + phase) * 0.85);
+    dummy.scale.setScalar(0.45 + hash2(i, 227) * 0.55); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
+    opacity.setX(i, smootherstep(progress / 0.08) * (1 - smootherstep((progress - 0.82) / 0.18)));
+  });
+  mesh.instanceMatrix.needsUpdate = true; opacity.needsUpdate = true;
 }
 
 function buildParticles(scene: SceneKind, season: Season, time: TimeOfDay, palette: ScenePalette, size: number) {

@@ -47,7 +47,9 @@ Với Vercel, chọn `assets/starter` làm **Root Directory**, chạy `npm run b
 
 ## Nguyên tắc cốt lõi
 
-Mỗi ô tối mọc cỏ hoặc lá; ô sáng để lộ đất. Đất là khối vuông màu cát nâu, cỏ đổi màu theo mùa, lá phối màu riêng. Bóng xám ghi cùng tọa độ với tán lá, chồng khít khi nhìn thẳng từ trên xuống. Thân và phần lá vượt ô mờ dần theo góc nhìn. Cỏ dài, cao thấp khác nhau và uốn ngọn trong phạm vi ô; các cấu trúc định vị đứng yên. Không phủ ảnh QR lên cảnh.
+Mỗi ô tối mọc cỏ hoặc lá; ô sáng để lộ đất. Đất là khối vuông màu cát nâu, cỏ đổi màu theo mùa, lá phối màu riêng. Bóng xám ghi cùng tọa độ với tán lá, chồng khít khi nhìn thẳng từ trên xuống. Thân và phần lá vượt ô mờ dần theo góc nhìn. Không phủ ảnh QR lên cảnh.
+
+Cây cao khoảng 1,8 lần bản trước, có ba tầng tán rộng 100% / 78% / 55%; đỉnh lá các tầng giữ nguyên tọa độ ô QR. Cỏ có lõi thẳng và ngọn xòe cong sang ô bên cạnh khi nhìn nghiêng. Từ góc cao 65–88°, ngọn xòe mờ dần, chỉ còn 3–5 ngọn nhỏ chuyển động trong chính ô của mình; các cấu trúc định vị đứng yên. Lá rơi là khối mỏng lấy màu trực tiếp từ tán ở cả bốn mùa: 120 lá trên desktop, 60 trên màn hình nhỏ, 40 cho mã dày trên 105 ô. Lá rơi và hiệu ứng mùa ẩn trước khi góc QR hoàn tất; chế độ giảm chuyển động không tạo lá rơi.
 
 Ảnh tải lên giữ lưới thực tế (21–177 ô mỗi cạnh) sau hiệu chỉnh phối cảnh và kiểm tra giải mã lại. Ảnh quá mờ hoặc nghiêng bị từ chối thay vì âm thầm tạo lại mã. Link/chữ được sinh mã mới với mức sửa lỗi `H`. Luôn giữ viền trống bốn ô và độ tương phản với nền đất. Chế độ giảm chuyển động tắt gió và hạt. Link cũ tiếp tục mở được.
 
@@ -58,6 +60,8 @@ Mỗi ô tối mọc cỏ hoặc lá; ô sáng để lộ đất. Đất là kh�
 ```
 
 Kiểm tra QR đơn sắc, bảng màu lấy trực tiếp từ nguồn, lưới ảnh gốc ở 21/37/65/177 ô, ảnh xoay/đảo màu/phối cảnh, link chia sẻ và tương thích bản cũ. Bộ đọc có giới hạn với ảnh phối cảnh mạnh, nhất là mã rất ít hoặc rất nhiều ô; nên dùng ảnh gốc rõ nét. Kiểm tra thêm ảnh chụp cảnh 3D ở nhiều thời điểm gió và kích thước màn hình; kiểm thử tự động không thay thế quét camera điện thoại thực tế.
+
+`npm run verify:nature` kiểm tra độ cao/tọa độ ba tầng tán, phạm vi chuyển động lõi cỏ, ô định vị, giới hạn số lá rơi và giá trị hoạt ảnh ở nhiều thời điểm cho mã 37/177 ô.
 
 ## License
 
