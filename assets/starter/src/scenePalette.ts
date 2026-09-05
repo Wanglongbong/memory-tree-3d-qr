@@ -27,20 +27,20 @@ export type TreeSeasonSuggestion = {
 
 const treeSeasonSuggestions: Record<Season, TreeSeasonSuggestion> = {
   spring: {
-    accent: "#d98fa9", floor: "#e8d0a0", effectLabel: "Cánh hoa bay",
-    nature: { grass: ["#4b652b", "#627d34", "#809346"], leaves: ["#28664b", "#3e7b56", "#5e9367", "#86aa77"], shadow: "#747477", effect: "#f2b7c6" },
+    accent: "#e69bb2", floor: "#e8d0a0", effectLabel: "Lá hồng & cánh hoa",
+    nature: { grass: ["#b8a77e", "#cfbd95", "#e3d1a8"], leaves: ["#a84e70", "#c97191", "#e69bb2", "#f4c4d1"], shadow: "#4b3827", effect: "#f2b7c6" },
   },
   summer: {
-    accent: "#d8cc63", floor: "#e8d0a0", effectLabel: "Đom đóm",
-    nature: { grass: ["#456b30", "#5d8039", "#7a9648"], leaves: ["#20513f", "#31674d", "#497d58", "#70966a"], shadow: "#747477", effect: "#e6d86b" },
+    accent: "#d64e4d", floor: "#e8d0a0", effectLabel: "Lá đỏ & đom đóm",
+    nature: { grass: ["#bd8355", "#d69d6c", "#e4b184"], leaves: ["#922c35", "#b43b43", "#d64e4d", "#ed8072"], shadow: "#4b3827", effect: "#e6d86b" },
   },
   autumn: {
     accent: "#e09a35", floor: "#e8d0a0", effectLabel: "Lá rơi",
-    nature: { grass: ["#80702c", "#a18c42", "#c6ae64"], leaves: ["#98501f", "#b66b27", "#d38b32", "#e5ad50"], shadow: "#747477", effect: "#e49a32" },
+    nature: { grass: ["#80702c", "#a18c42", "#c6ae64"], leaves: ["#98501f", "#b66b27", "#d38b32", "#e5ad50"], shadow: "#4b3827", effect: "#e49a32" },
   },
   winter: {
-    accent: "#c8dbe0", floor: "#e8d0a0", effectLabel: "Tuyết nhẹ",
-    nature: { grass: ["#375d76", "#527b92", "#86aab7"], leaves: ["#235449", "#326b5d", "#56887c", "#a4beb8"], shadow: "#747477", effect: "#edf6f3" },
+    accent: "#c8dbe0", floor: "#e8d0a0", effectLabel: "Tuyết rơi & đọng",
+    nature: { grass: ["#375d76", "#527b92", "#86aab7"], leaves: ["#235449", "#326b5d", "#56887c", "#a4beb8"], shadow: "#4b3827", effect: "#edf6f3" },
   },
 };
 
@@ -59,8 +59,8 @@ const roleBases: Record<SceneKind, Record<QrVisualRole, string>> = {
 };
 
 const treeSeasonBases: Record<Season, Record<QrVisualRole, string>> = {
-  spring: { protected: "#405725", canopy: "#28664b", roots: "#4b652b", landscape: "#4b652b" },
-  summer: { protected: "#355225", canopy: "#20513f", roots: "#456b30", landscape: "#456b30" },
+  spring: { protected: "#66502e", canopy: "#963953", roots: "#816335", landscape: "#816335" },
+  summer: { protected: "#713f24", canopy: "#922c35", roots: "#9a552e", landscape: "#9a552e" },
   autumn: { protected: "#635321", canopy: "#98501f", roots: "#80702c", landscape: "#80702c" },
   winter: { protected: "#2c4b61", canopy: "#235449", roots: "#375d76", landscape: "#375d76" },
 };

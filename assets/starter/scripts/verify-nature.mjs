@@ -3,6 +3,13 @@ import { sourceModule } from "./source-module.mjs";
 
 const { createQrMatrix } = await sourceModule("src/qr.ts");
 const { getScenePalette } = await sourceModule("src/scenePalette.ts");
+const { compactEffects, effectBudget, decorationOpacity, shadowPixels, buildSnowCover, buildSnowfall, animateSnowfall } = await sourceModule("src/seasonEffects.ts");
+assert(compactEffects(844, 390), "Landscape phone keeps mobile particle budget");
+assert(compactEffects(1024, 768, true), "Touch device keeps compact budget");
+assert(!compactEffects(1440, 900));
+assert.equal(decorationOpacity(0), 1);
+assert.equal(decorationOpacity(0.62), 0);
+assert.equal(decorationOpacity(1), 0);
 const { createGrowthCells, createTieredCanopy, createGrassBlades, createGrassGeometry, buildFallingLeaves, animateFallingLeaves } = await sourceModule("src/MemoryTreeQr.tsx");
 const grassGeometry = createGrassGeometry();
 const positions = grassGeometry.getAttribute("position");
@@ -20,6 +27,14 @@ for (const matrix of [createQrMatrix("https://example.com/memory-tree-test"), { 
   const entries = createGrowthCells(matrix, "tree");
   const crowns = createTieredCanopy(entries, matrix.size);
   const canopyCells = entries.filter((entry) => entry.canopy);
+  const shadow = shadowPixels(entries, matrix.size);
+  assert.equal(shadow[3], 0, "Shadow leaves quiet-zone corners untouched");
+  const alpha = shadow.filter((_, i) => i % 4 === 3);
+  assert(alpha.some((value) => value > 0 && value < 100), "Shadow has soft translucent edges");
+  assert(Math.max(...alpha) < 255, "No opaque shadow tiles");
+  const snowCover = buildSnowCover(crowns, entries);
+  assert(snowCover.count > 0);
+  snowCover.geometry.dispose(); snowCover.material.dispose();
   assert.equal(new Set(crowns.map((entry) => `${entry.x},${entry.z}`)).size, canopyCells.length, "Every original canopy cell remains covered");
   for (const crown of crowns) {
     assert(matrix.modules[crown.z + (matrix.size - 1) / 2][crown.x + (matrix.size - 1) / 2], "Tier tops only occupy original dark cells");
@@ -42,13 +57,27 @@ for (const matrix of [createQrMatrix("https://example.com/memory-tree-test"), { 
     for (const season of ["spring", "summer", "autumn", "winter"]) {
       const palette = getScenePalette("tree", season, "day", "#e09a35", "#e8d0a0");
       const leaves = buildFallingLeaves(crowns, palette, matrix.size);
-      assert.equal(leaves.count, matrix.size > 105 ? 40 : width <= 720 ? 60 : 120);
+      assert.equal(leaves.count, matrix.size > 105 ? 80 : width <= 720 ? 120 : 240);
       for (const time of [0, 0.25, 8, 20, 500]) {
         animateFallingLeaves(leaves, time, matrix.size);
         assert(leaves.instanceMatrix.array.every(Number.isFinite));
         assert(leaves.geometry.getAttribute("leafOpacity").array.every((value) => value >= 0 && value <= 1));
       }
       leaves.geometry.dispose(); leaves.material.dispose();
+      if (season === "winter") {
+        const snow = buildSnowfall(matrix.size, effectBudget(matrix.size, width <= 720).snow);
+        assert.equal(snow.geometry.getAttribute("position").count, matrix.size > 105 ? 60 : width <= 720 ? 90 : 180);
+        for (const time of [0, 1, 25, 1500]) {
+          animateSnowfall(snow, time, matrix.size);
+          const positions = snow.geometry.getAttribute("position");
+          assert(positions.array.every(Number.isFinite));
+          for (let i = 0; i < positions.count; i++) {
+            assert(positions.getY(i) >= 0.34, "Snow cannot pass through the floor");
+            if (i % 5 === 0) assert(positions.getY(i) <= 1.02, "20% of snow drifts between grass tufts");
+          }
+        }
+        snow.geometry.dispose(); snow.material.dispose();
+      }
     }
   }
   console.log(`Nature invariants passed: ${matrix.size}×${matrix.size}, 3 canopy tiers, cell-safe cores, 4 seasons, mobile/desktop leaf budgets`);
