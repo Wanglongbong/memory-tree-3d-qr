@@ -21,24 +21,25 @@ export type TreeNaturePalette = {
 export type TreeSeasonSuggestion = {
   accent: string;
   floor: string;
+  effectLabel: string;
   nature: TreeNaturePalette;
 };
 
 const treeSeasonSuggestions: Record<Season, TreeSeasonSuggestion> = {
   spring: {
-    accent: "#d98fa9", floor: "#e7edc7",
+    accent: "#d98fa9", floor: "#e7edc7", effectLabel: "Cánh hoa bay",
     nature: { grass: ["#4f7c3e", "#6f9b4b", "#95ba60"], leaves: ["#3f7139", "#659348", "#8fb45a", "#b7d477"], shadow: "#48613a", effect: "#f2b7c6" },
   },
   summer: {
-    accent: "#d8cc63", floor: "#cbe0a6",
+    accent: "#d8cc63", floor: "#cbe0a6", effectLabel: "Đom đóm",
     nature: { grass: ["#315f3a", "#467b45", "#64964f"], leaves: ["#245737", "#397044", "#52884c", "#78a65c"], shadow: "#31523a", effect: "#e6d86b" },
   },
   autumn: {
-    accent: "#e09a35", floor: "#f0d49a",
+    accent: "#e09a35", floor: "#f0d49a", effectLabel: "Lá rơi",
     nature: { grass: ["#7c5727", "#9a6a2a", "#b47e31"], leaves: ["#8e4d22", "#b56524", "#d3812c", "#e6ae42"], shadow: "#6a4b26", effect: "#e49a32" },
   },
   winter: {
-    accent: "#c8dbe0", floor: "#dfebe9",
+    accent: "#c8dbe0", floor: "#dfebe9", effectLabel: "Tuyết nhẹ",
     nature: { grass: ["#5b7168", "#748a80", "#94a69e"], leaves: ["#49645a", "#687f74", "#8fa299", "#b7c7c0"], shadow: "#52655d", effect: "#edf6f3" },
   },
 };

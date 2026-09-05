@@ -109,14 +109,14 @@ export function App() {
       <div className="scene-grid">{scenes.map((scene) => <button key={scene.id} className={project.scene === scene.id ? "active" : ""} onClick={() => update("scene", scene.id)}><b>{scene.icon}</b><span><strong>{scene.name}</strong><small>{scene.hint}</small></span></button>)}</div>
       <div className="panel-heading panel-section"><span>03</span><div><strong>Khí sắc</strong><small>Mùa, ánh sáng và màu chủ đạo</small></div></div>
       <div className="customizer">
-        <label>Mùa<div className="segmented">{seasons.map(({id, name}) => <button key={id} className={project.season === id ? "active" : ""} onClick={() => chooseSeason(id)}>{name}</button>)}</div></label>
+        <div className="option-group"><span>Mùa</span><div className="segmented">{seasons.map(({id, name}) => <button type="button" key={id} className={project.season === id ? "active" : ""} onClick={() => chooseSeason(id)}>{name}</button>)}</div></div>
         {project.scene === "tree" && <div className="season-suggestion" aria-label={`Bảng màu gợi ý mùa ${project.season}`}>
           <span>Bảng màu đang áp dụng</span>
           <div><b>Cỏ</b><i>{treeSuggestion.nature.grass.map((color) => <em key={color} style={{ background: color }} title={`Màu cỏ ${color}`}/>)}</i></div>
           <div><b>Lá</b><i>{treeSuggestion.nature.leaves.map((color) => <em key={color} style={{ background: color }} title={`Màu lá ${color}`}/>)}</i></div>
-          <div><b>Điểm nhấn</b><i><em style={{ background: treeSuggestion.accent }} title={`Màu điểm nhấn ${treeSuggestion.accent}`}/></i></div>
+          <div className="season-effect"><b>Điểm nhấn</b><i><em style={{ background: treeSuggestion.accent }} title={`Màu điểm nhấn ${treeSuggestion.accent}`}/></i><small>{treeSuggestion.effectLabel}</small></div>
         </div>}
-        <label>Ánh sáng<div className="segmented two"><button className={project.time === "day" ? "active" : ""} onClick={() => update("time", "day" as TimeOfDay)}>☀ Ban ngày</button><button className={project.time === "night" ? "active" : ""} onClick={() => update("time", "night" as TimeOfDay)}>◐ Ban đêm</button></div></label>
+        <div className="option-group"><span>Ánh sáng</span><div className="segmented two"><button type="button" className={project.time === "day" ? "active" : ""} onClick={() => update("time", "day" as TimeOfDay)}>☀ Ban ngày</button><button type="button" className={project.time === "night" ? "active" : ""} onClick={() => update("time", "night" as TimeOfDay)}>◐ Ban đêm</button></div></div>
         <label>Màu nhấn<div className="color-row"><input type="color" value={project.accent} onChange={(e) => update("accent", e.target.value)} aria-label="Chọn màu nhấn"/><span>{project.accent.toUpperCase()}</span></div></label>
         <label>Màu sàn <small>(tự giữ độ sáng để quét)</small><div className="color-row"><input type="color" value={scenePalette.floor} onChange={(e) => update("floorColor", e.target.value)} aria-label="Chọn màu sàn"/><span>{scenePalette.floor.toUpperCase()}</span><button type="button" onClick={() => update("floorColor", undefined)}>Theo mùa</button></div></label>
         <div className="palette-preview" aria-label="Bảng màu QR hiện tại"><i style={{background: scenePalette.floor}} title="Màu sàn"/>{Object.values(scenePalette.modules).map((color, index) => <i key={`${color}-${index}`} style={{background: color}} title="Màu module QR"/>)}<span>Sàn + 4 màu QR</span></div>
