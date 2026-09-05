@@ -27,27 +27,27 @@ export type TreeSeasonSuggestion = {
 
 const treeSeasonSuggestions: Record<Season, TreeSeasonSuggestion> = {
   spring: {
-    accent: "#d98fa9", floor: "#e7edc7", effectLabel: "Cánh hoa bay",
-    nature: { grass: ["#4f7c3e", "#6f9b4b", "#95ba60"], leaves: ["#3f7139", "#659348", "#8fb45a", "#b7d477"], shadow: "#48613a", effect: "#f2b7c6" },
+    accent: "#d98fa9", floor: "#e8d0a0", effectLabel: "Cánh hoa bay",
+    nature: { grass: ["#4b652b", "#627d34", "#809346"], leaves: ["#28664b", "#3e7b56", "#5e9367", "#86aa77"], shadow: "#747477", effect: "#f2b7c6" },
   },
   summer: {
-    accent: "#d8cc63", floor: "#cbe0a6", effectLabel: "Đom đóm",
-    nature: { grass: ["#315f3a", "#467b45", "#64964f"], leaves: ["#245737", "#397044", "#52884c", "#78a65c"], shadow: "#31523a", effect: "#e6d86b" },
+    accent: "#d8cc63", floor: "#e8d0a0", effectLabel: "Đom đóm",
+    nature: { grass: ["#456b30", "#5d8039", "#7a9648"], leaves: ["#20513f", "#31674d", "#497d58", "#70966a"], shadow: "#747477", effect: "#e6d86b" },
   },
   autumn: {
-    accent: "#e09a35", floor: "#f0d49a", effectLabel: "Lá rơi",
-    nature: { grass: ["#7c5727", "#9a6a2a", "#b47e31"], leaves: ["#8e4d22", "#b56524", "#d3812c", "#e6ae42"], shadow: "#6a4b26", effect: "#e49a32" },
+    accent: "#e09a35", floor: "#e8d0a0", effectLabel: "Lá rơi",
+    nature: { grass: ["#80702c", "#a18c42", "#c6ae64"], leaves: ["#98501f", "#b66b27", "#d38b32", "#e5ad50"], shadow: "#747477", effect: "#e49a32" },
   },
   winter: {
-    accent: "#c8dbe0", floor: "#dfebe9", effectLabel: "Tuyết nhẹ",
-    nature: { grass: ["#5b7168", "#748a80", "#94a69e"], leaves: ["#49645a", "#687f74", "#8fa299", "#b7c7c0"], shadow: "#52655d", effect: "#edf6f3" },
+    accent: "#c8dbe0", floor: "#e8d0a0", effectLabel: "Tuyết nhẹ",
+    nature: { grass: ["#375d76", "#527b92", "#86aab7"], leaves: ["#235449", "#326b5d", "#56887c", "#a4beb8"], shadow: "#747477", effect: "#edf6f3" },
   },
 };
 
 export function getTreeSeasonSuggestion(season: Season) { return treeSeasonSuggestions[season]; }
 
 const seasonalFloor: Record<SceneKind, Record<Season, string>> = {
-  tree: { spring: "#e7edc7", summer: "#cbe0a6", autumn: "#f0d49a", winter: "#dfebe9" },
+  tree: { spring: "#e8d0a0", summer: "#e8d0a0", autumn: "#e8d0a0", winter: "#e8d0a0" },
   lantern: { spring: "#f0c6a7", summer: "#e6d39a", autumn: "#edc28c", winter: "#d9ddd2" },
   koi: { spring: "#c5dcce", summer: "#a9d9d5", autumn: "#c8d4b4", winter: "#cadfe2" },
 };
@@ -59,10 +59,10 @@ const roleBases: Record<SceneKind, Record<QrVisualRole, string>> = {
 };
 
 const treeSeasonBases: Record<Season, Record<QrVisualRole, string>> = {
-  spring: { protected: "#244b32", canopy: "#356239", roots: "#4a6534", landscape: "#5b5b2f" },
-  summer: { protected: "#17452f", canopy: "#285b36", roots: "#3b642f", landscape: "#4b5a29" },
-  autumn: { protected: "#4b311d", canopy: "#6a3f1e", roots: "#73501f", landscape: "#5e5525" },
-  winter: { protected: "#29443d", canopy: "#3b5b50", roots: "#4d6257", landscape: "#52645d" },
+  spring: { protected: "#405725", canopy: "#28664b", roots: "#4b652b", landscape: "#4b652b" },
+  summer: { protected: "#355225", canopy: "#20513f", roots: "#456b30", landscape: "#456b30" },
+  autumn: { protected: "#635321", canopy: "#98501f", roots: "#80702c", landscape: "#80702c" },
+  winter: { protected: "#2c4b61", canopy: "#235449", roots: "#375d76", landscape: "#375d76" },
 };
 
 export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDay, accentHex: string, floorHex?: string): ScenePalette {
@@ -77,7 +77,7 @@ export function getScenePalette(scene: SceneKind, season: Season, time: TimeOfDa
   const showFloor = floor.clone().lerp(new THREE.Color(scene === "koi" ? "#17373c" : "#2b2118"), time === "night" ? 0.55 : 0.2);
   return {
     floor: `#${floor.getHexString()}`,
-    showcaseFloor: `#${showFloor.getHexString()}`,
+    showcaseFloor: scene === "tree" ? "#856040" : `#${showFloor.getHexString()}`,
     modules,
     trunk: scene === "tree" ? "#603c2c" : scene === "lantern" ? "#4d3225" : "#315f5c",
     glow: `#${accent.getHexString()}`,

@@ -1,3 +1,5 @@
+import { unpackQrMatrix, type PackedQrMatrix } from "./qr";
+
 export type SceneKind = "tree" | "lantern" | "koi";
 export type Season = "spring" | "summer" | "autumn" | "winter";
 export type TimeOfDay = "day" | "night";
@@ -6,6 +8,7 @@ export type ProjectSource = "upload" | "vietqr" | "text";
 export type MemoryProject = {
   version: 1;
   payload: string;
+  matrix?: PackedQrMatrix;
   source: ProjectSource;
   scene: SceneKind;
   season: Season;
@@ -33,6 +36,7 @@ export function loadProjectFromHash(): MemoryProject | null {
     if (parsed.version !== 1 || typeof parsed.payload !== "string" || parsed.payload.length === 0 || parsed.payload.length > 4096) return null;
     if (!["tree", "lantern", "koi"].includes(parsed.scene ?? "")) return null;
     if (!["spring", "summer", "autumn", "winter"].includes(parsed.season ?? "")) return null;
+    if (parsed.matrix) unpackQrMatrix(parsed.matrix);
     return parsed as MemoryProject;
   } catch { return null; }
 }

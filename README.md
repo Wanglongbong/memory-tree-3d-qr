@@ -31,24 +31,25 @@ npm install
 npm run dev
 ```
 
-Ứng dụng cho phép tải ảnh QR để đọc ngay trên thiết bị, nhập link/nội dung hoặc tạo VietQR bằng số tài khoản ngân hàng Việt Nam. Sau đó chọn cảnh, mùa, ngày/đêm, màu sắc và chuyển giữa **Vật phẩm 3D** và **Quét mã**. Các module co cụm thành vật phẩm ở góc thấp, rồi trải ra đúng ma trận khi camera lên cao; sàn và QR đều dùng bảng màu đa sắc của cảnh.
+Ứng dụng cho phép chọn ảnh QR (kể cả ảnh từ ứng dụng ngân hàng) hoặc nhập link/nội dung. Ảnh được đọc ngay trên thiết bị; lưới ô gốc được giữ lại thay vì sinh lại từ nội dung. Sau đó chọn cảnh, mùa, ngày/đêm, màu sắc và chuyển giữa **Vật phẩm 3D** và **Quét mã**.
 
-## Kết nối VietQR
+## Website tĩnh
 
-Sao chép `.env.example` thành `.env.local`, rồi điền `VIETQR_CLIENT_ID` và `VIETQR_API_KEY` lấy từ tài khoản VietQR. Khi deploy, đặt hai biến này trong Vercel Project Settings. Không đưa khóa API vào biến có tiền tố `VITE_`.
+Không cần backend, tài khoản dịch vụ, khóa API hoặc Supabase. Mã và ảnh được xử lý trong trình duyệt, phông chữ đóng gói cùng website. Để dùng QR ngân hàng, chọn ảnh QR sẵn có từ ứng dụng ngân hàng; không còn biểu mẫu tạo từ số tài khoản.
 
-Với Vercel, chọn `assets/starter` làm **Root Directory**. Quảng cáo mặc định tắt bằng `VITE_ADS_MODE=off`; giao diện tạo và xem thử không phụ thuộc quảng cáo.
+Với Vercel, chọn `assets/starter` làm **Root Directory**, chạy `npm run build`, xuất thư mục `dist`. Không có Vercel Function.
 
 ## Quyền riêng tư và chia sẻ
 
 - Ảnh QR được giải mã trong trình duyệt và không được tải lên máy chủ.
 - Bản nháp được lưu trên thiết bị.
-- Link 3D chứa cấu hình trong URL fragment (`#p=...`), nên máy chủ không lưu dự án. Người nhận link vẫn có thể đọc dữ liệu nằm trong QR.
-- Form VietQR gửi thông tin ngân hàng tới VietQR thông qua Vercel Function và không ghi log nội dung request.
+- Link 3D chứa cấu hình và lưới ô đóng gói trong URL fragment (`#p=...`), nên máy chủ không lưu dự án. Người nhận link vẫn có thể đọc dữ liệu nằm trong QR. Mã rất nhiều ô tạo link dài hơn; không dùng dịch vụ rút gọn link bên ngoài.
 
 ## Nguyên tắc cốt lõi
 
-Mô hình 3D chỉ là lớp nghệ thuật. Chế độ quét luôn dùng đúng ma trận QR được sinh từ payload cuối cùng, mức sửa lỗi `H`, nền sáng đồng nhất và quiet zone bốn ô. Repo không chứa số tài khoản, khóa VietQR hay dữ liệu cá nhân mẫu.
+Mỗi ô tối mọc cỏ hoặc lá; ô sáng để lộ đất. Đất là khối vuông màu cát nâu, cỏ đổi màu theo mùa, lá phối màu riêng. Bóng xám ghi cùng tọa độ với tán lá, chồng khít khi nhìn thẳng từ trên xuống. Thân và phần lá vượt ô mờ dần theo góc nhìn. Cỏ dài, cao thấp khác nhau và uốn ngọn trong phạm vi ô; các cấu trúc định vị đứng yên. Không phủ ảnh QR lên cảnh.
+
+Ảnh tải lên giữ lưới thực tế (21–177 ô mỗi cạnh) sau hiệu chỉnh phối cảnh và kiểm tra giải mã lại. Ảnh quá mờ hoặc nghiêng bị từ chối thay vì âm thầm tạo lại mã. Link/chữ được sinh mã mới với mức sửa lỗi `H`. Luôn giữ viền trống bốn ô và độ tương phản với nền đất. Chế độ giảm chuyển động tắt gió và hạt. Link cũ tiếp tục mở được.
 
 ## Kiểm tra
 
@@ -56,7 +57,7 @@ Mô hình 3D chỉ là lớp nghệ thuật. Chế độ quét luôn dùng đún
 ./scripts/check_starter.sh
 ```
 
-Kiểm tra tự động cả QR đơn sắc lẫn ba bảng màu đa sắc, giải mã lại đúng payload, chạy TypeScript và build Vite. Trước khi phát hành, vẫn nên thử quét màn hình thật bằng hai ứng dụng camera khác nhau.
+Kiểm tra QR đơn sắc, bảng màu lấy trực tiếp từ nguồn, lưới ảnh gốc ở 21/37/65/177 ô, ảnh xoay/đảo màu/phối cảnh, link chia sẻ và tương thích bản cũ. Bộ đọc có giới hạn với ảnh phối cảnh mạnh, nhất là mã rất ít hoặc rất nhiều ô; nên dùng ảnh gốc rõ nét. Kiểm tra thêm ảnh chụp cảnh 3D ở nhiều thời điểm gió và kích thước màn hình; kiểm thử tự động không thay thế quét camera điện thoại thực tế.
 
 ## License
 

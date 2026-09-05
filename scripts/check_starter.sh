@@ -7,6 +7,7 @@ starter_dir="$skill_dir/assets/starter"
 cd "$starter_dir"
 npm install
 npm run verify:qr
+npm run verify:import
 npm run verify:colored
 npm run check
 npm run build

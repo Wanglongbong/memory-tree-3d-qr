@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
-import { classifyDarkModule, createQrMatrix, type QrMatrix, type QrVisualRole } from "./qr";
+import { classifyDarkModule, createQrMatrix, unpackQrMatrix, type QrMatrix, type QrVisualRole } from "./qr";
 import type { MemoryProject, SceneKind, Season, TimeOfDay } from "./project";
 import { getScenePalette, type ScenePalette } from "./scenePalette";
 
@@ -32,7 +32,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     if (!mount) return;
     const container = mount;
     let matrix: QrMatrix;
-    try { matrix = createQrMatrix(safePayload); }
+    try { matrix = project.matrix ? unpackQrMatrix(project.matrix) : createQrMatrix(safePayload); }
     catch { setStatus("Nội dung quá dài hoặc không thể tạo QR."); return; }
 
     let renderer: THREE.WebGLRenderer;
@@ -57,9 +57,29 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const groundMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), groundMaterial, entries.length);
     groundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const grassBlades = project.scene === "tree" ? createGrassBlades(entries) : [];
-    const grassGeometry = new THREE.ConeGeometry(0.052, 1, 3); grassGeometry.translate(0, 0.5, 0);
-    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, flatShading: true });
+    const grassBlades = project.scene === "tree" ? createGrassBlades(entries, matrix.size) : [];
+    const grassGeometry = new THREE.ConeGeometry(0.06, 1, 3, 5); grassGeometry.translate(0, 0.5, 0);
+    const grassMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    // Bend blade tips on the GPU, never the roots. World-space displacement stays
+    // inside each QR cell, including in the top view and for dense 177×177 codes.
+    const grassTime = { value: 0 }, grassWind = { value: 0 };
+    grassMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.grassTime = grassTime; shader.uniforms.grassWind = grassWind;
+      shader.vertexShader = `uniform float grassTime; uniform float grassWind; varying float bladeTip;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `
+        #include <begin_vertex>
+        bladeTip = position.y;
+        float phase = instanceMatrix[3].x * 2.3 + instanceMatrix[3].z * 1.7;
+        float moving = step(0.0, instanceMatrix[3].y - 0.115);
+        float bend = pow(position.y, 1.7) * grassWind * moving;
+        transformed.x += sin(grassTime * 1.6 + phase) * 0.16 * bend;
+        transformed.z += sin(grassTime * 1.1 + phase * 0.7) * 0.08 * bend;
+      `);
+      shader.fragmentShader = `varying float bladeTip;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
+        #include <color_fragment>
+        diffuseColor.rgb *= mix(0.76, 1.0, smoothstep(0.0, 0.85, bladeTip));
+        ${project.season === "winter" ? "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.77, 0.82), smoothstep(0.91, 1.0, bladeTip) * 0.65);" : ""}
+      `);
+    };
     const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassBlades.length);
     grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const crownMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: project.scene === "tree" });
@@ -72,10 +92,10 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const grassColors = (palette.nature?.grass ?? [palette.modules.landscape, palette.modules.roots, palette.modules.canopy]).map((color) => new THREE.Color(color));
     const leafColors = (palette.nature?.leaves ?? [palette.modules.canopy, palette.modules.landscape, palette.modules.roots, palette.glow]).map((color) => new THREE.Color(color));
     entries.forEach((entry, index) => {
-      groundMesh.setColorAt(index, moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]);
+      groundMesh.setColorAt(index, project.scene === "tree" && entry.role === "canopy" ? new THREE.Color(palette.nature!.shadow) : moduleColors[entry.role]); crownMesh.setColorAt(index, moduleColors[entry.role]);
       ornamentMesh.setColorAt(index, project.scene === "tree" ? leafColors[Math.floor(entry.phase * leafColors.length) % leafColors.length] : moduleColors[entry.role]);
     });
-    grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, grassColors[Math.floor(blade.phase * grassColors.length) % grassColors.length]));
+    grassBlades.forEach((blade, index) => grassMesh.setColorAt(index, blade.role === "protected" ? moduleColors.protected : grassColors[Math.floor(blade.phase * grassColors.length) % grassColors.length]));
     if (groundMesh.instanceColor) groundMesh.instanceColor.needsUpdate = true;
     if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
     if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
@@ -83,7 +103,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     root.add(groundMesh, grassMesh, crownMesh, ornamentMesh);
 
     const treeShadowEntries = project.scene === "tree" ? entries.filter((entry) => entry.role === "canopy") : [];
-    const treeShadowColor = new THREE.Color(palette.nature?.shadow ?? palette.modules.landscape).lerp(new THREE.Color(palette.trunk), 0.16);
+    const treeShadowColor = new THREE.Color(palette.nature?.shadow ?? palette.modules.landscape);
     const treeShadowMaterial = new THREE.MeshBasicMaterial({ color: treeShadowColor, transparent: true, opacity: 0.34, depthWrite: false });
     const treeShadowMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.035, 0.9), treeShadowMaterial, treeShadowEntries.length);
     const shadowDummy = new THREE.Object3D();
@@ -97,7 +117,7 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     const scanFloorMaterial = new THREE.MeshBasicMaterial({ color: palette.floor });
     const scanFloor = new THREE.Mesh(new THREE.BoxGeometry(matrix.size + 8, 0.42, matrix.size + 8), scanFloorMaterial); scanFloor.position.y = -0.28; root.add(scanFloor);
     const organicFloorMaterial = new THREE.MeshStandardMaterial({ color: palette.showcaseFloor, transparent: true, roughness: project.scene === "koi" ? 0.3 : 0.92, metalness: project.scene === "koi" ? 0.08 : 0 });
-    const organicFloor = new THREE.Mesh(new THREE.CylinderGeometry((matrix.size + 8) * 0.7, (matrix.size + 8) * 0.73, 0.72, project.scene === "koi" ? 48 : 16), organicFloorMaterial);
+    const organicFloor = new THREE.Mesh(project.scene === "tree" ? new THREE.BoxGeometry(matrix.size + 8, 1.1, matrix.size + 8) : new THREE.CylinderGeometry((matrix.size + 8) * 0.7, (matrix.size + 8) * 0.73, 0.72, project.scene === "koi" ? 48 : 16), organicFloorMaterial);
     organicFloor.position.y = -0.66; root.add(organicFloor);
     const supportLayer = buildSupportLayer(project.scene, entries, palette, matrix.size); root.add(supportLayer);
     const particles = buildParticles(project.scene, project.season, project.time, palette, matrix.size); root.add(particles);
@@ -137,12 +157,12 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     function updateGrowth(growthProgress: number, time: number, windStrength: number) {
       entries.forEach((entry, index) => {
         const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.22 - entry.phase * 0.22, 0, 1));
-        const groundWidth = 0.9 * local;
+        const groundWidth = (entry.role === "protected" ? 1 : 0.96) * local;
         cellScale.set(Math.max(0.001, groundWidth), Math.max(0.001, 0.16 * local), Math.max(0.001, groundWidth));
         dummy.position.set(entry.x, 0.08 * local, entry.z); dummy.rotation.set(0, 0, 0); dummy.scale.copy(cellScale); dummy.updateMatrix(); groundMesh.setMatrixAt(index, dummy.matrix);
 
         const crownY = THREE.MathUtils.lerp(0.2, entry.height, local);
-        const crownWidth = 0.88 * local * entry.canopy;
+        const crownWidth = 0.96 * local * entry.canopy;
         cellScale.set(Math.max(0.001, crownWidth), Math.max(0.001, 0.2 * local), Math.max(0.001, crownWidth));
         const leafWind = Math.sin(time * 0.00135 + entry.phase * 19) * 0.045 * windStrength;
         dummy.position.set(entry.x, crownY, entry.z); dummy.rotation.set(leafWind * 0.55, 0, leafWind); dummy.scale.copy(cellScale); dummy.updateMatrix(); crownMesh.setMatrixAt(index, dummy.matrix);
@@ -157,9 +177,8 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
 
       grassBlades.forEach((blade, index) => {
         const local = reducedMotion ? 1 : smootherstep(THREE.MathUtils.clamp(growthProgress * 1.25 - blade.phase * 0.18, 0, 1));
-        const wind = Math.sin(time * 0.002 + blade.phase * 23) * 0.11 * windStrength;
-        dummy.position.set(blade.x, 0.11, blade.z);
-        dummy.rotation.set(wind * 0.35, blade.phase * Math.PI, wind);
+        dummy.position.set(blade.x, blade.role === "protected" ? 0.11 : 0.12, blade.z);
+        dummy.rotation.set(0, blade.phase * Math.PI, 0);
         dummy.scale.set(1, Math.max(0.001, blade.height * local), 1);
         dummy.updateMatrix(); grassMesh.setMatrixAt(index, dummy.matrix);
       });
@@ -167,14 +186,13 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
     }
 
     function updateViewLayers(mix: number) {
-      organicFloorMaterial.opacity = 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.45) / 0.45, 0, 1)); organicFloor.visible = organicFloorMaterial.opacity > 0.01;
+      organicFloorMaterial.opacity = project.scene === "tree" ? 1 : 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.45) / 0.45, 0, 1)); organicFloor.visible = organicFloorMaterial.opacity > 0.01;
       setLayerOpacity(supportLayer, 1 - smootherstep(THREE.MathUtils.clamp((mix - 0.25) / 0.54, 0, 1)));
       if (project.scene === "tree") {
         const qrAlignment = smootherstep(THREE.MathUtils.clamp((mix - 0.04) / 0.84, 0, 1));
-        const qrLeafOpacity = THREE.MathUtils.lerp(0.1, 1, qrAlignment);
-        crownMaterial.opacity = qrLeafOpacity; crownMaterial.depthWrite = qrLeafOpacity > 0.5;
-        ornamentMaterial.opacity = THREE.MathUtils.lerp(0.12, 0, qrAlignment); ornamentMaterial.depthWrite = false;
-        treeShadowMaterial.opacity = THREE.MathUtils.lerp(0.34, 0.56, qrAlignment);
+        crownMaterial.opacity = 1; crownMaterial.depthWrite = true;
+        ornamentMaterial.opacity = 1 - qrAlignment; ornamentMaterial.depthWrite = false; ornamentMesh.visible = qrAlignment < 0.999;
+        treeShadowMaterial.opacity = 0.34;
       }
       particles.visible = mix < 0.62; particles.scale.setScalar(Math.max(0.001, 1 - mix));
     }
@@ -200,14 +218,16 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       if (Math.abs(scanMix - desiredMix) < 0.0001) scanMix = desiredMix;
       const growthProgress = activeMode === "scan" ? 1 : THREE.MathUtils.clamp((now - bornAt) / 1900, 0, 1);
       const windStrength = reducedMotion ? 0 : 1 - smootherstep(scanMix);
-      if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && (windStrength > 0.001 || Math.abs(scanMix - previousMix) > 0.001))) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
+      grassTime.value = now * 0.001; grassWind.value = reducedMotion ? 0 : THREE.MathUtils.lerp(1, 0.85, smootherstep(scanMix));
+      if (Math.abs(growthProgress - previousGrowth) > 0.001 || (project.scene === "tree" && Math.abs(scanMix - previousMix) > 0.001)) { updateGrowth(growthProgress, now, windStrength); previousGrowth = growthProgress; }
       if (Math.abs(scanMix - previousMix) > 0.001) { updateViewLayers(scanMix); previousMix = scanMix; }
       if (!reducedMotion && !dragging && activeMode === "showcase" && scanMix < 0.12) targetYaw += delta * 0.045;
       root.rotation.y = currentYaw * (1 - smootherstep(scanMix));
       const distance = matrix.size * 1.72; const lookHeight = THREE.MathUtils.lerp(project.scene === "tree" ? matrix.size * 0.145 : project.scene === "lantern" ? matrix.size * 0.1 : 0, 0, smootherstep(scanMix));
       camera.position.set(0, lookHeight + Math.sin(currentElevation) * distance, Math.max(0.001, Math.cos(currentElevation) * distance));
       cameraUp.lerpVectors(showUp, scanUp, smootherstep(scanMix)).normalize(); camera.up.copy(cameraUp);
-      camera.zoom = THREE.MathUtils.lerp(project.scene === "tree" ? 1.06 : project.scene === "lantern" ? 1.1 : 1.04, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
+      const showcaseZoom = project.scene === "tree" ? Math.min(1.06, (camera.right - camera.left) / (Math.SQRT2 * (matrix.size + 8) + 2)) : project.scene === "lantern" ? 1.1 : 1.04;
+      camera.zoom = THREE.MathUtils.lerp(showcaseZoom, 1, smootherstep(scanMix)); camera.updateProjectionMatrix(); camera.lookAt(0, lookHeight, 0);
       if (!reducedMotion) { animateParticles(particles, now, delta, project.scene, project.season, matrix.size); animateSupportLayer(supportLayer, now, project.scene); }
       renderer.render(scene, camera); frame = requestAnimationFrame(animate);
     }
@@ -220,10 +240,10 @@ export function MemoryTreeQr({ project, onShare, shareLabel }: Props) {
       scene.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.geometry) geometries.add(mesh.geometry); const material = mesh.material; if (material) (Array.isArray(material) ? material : [material]).forEach((item) => materials.add(item)); });
       geometries.forEach((geometry) => geometry.dispose()); materials.forEach((material) => material.dispose()); renderer.dispose(); renderer.domElement.remove();
     };
-  }, [safePayload, project.scene, project.season, project.time, project.accent, project.floorColor]);
+  }, [safePayload, project.matrix, project.scene, project.season, project.time, project.accent, project.floorColor]);
 
   async function downloadQr(hd: boolean) {
-    const matrix = createQrMatrix(safePayload); const size = hd ? 3200 : 1600, footer = hd ? 160 : 96, cells = matrix.size + 8;
+    const matrix = project.matrix ? unpackQrMatrix(project.matrix) : createQrMatrix(safePayload); const size = hd ? 3200 : 1600, footer = hd ? 160 : 96, cells = matrix.size + 8;
     const canvas = document.createElement("canvas"); canvas.width = size; canvas.height = size + footer;
     const context = canvas.getContext("2d"); if (!context) return;
     context.fillStyle = palette.floor; context.fillRect(0, 0, canvas.width, canvas.height);
@@ -258,17 +278,18 @@ function createGrowthCells(matrix: QrMatrix, scene: SceneKind): GrowthCell[] {
   return entries;
 }
 
-function createGrassBlades(entries: GrowthCell[]): GrassBlade[] {
+function createGrassBlades(entries: GrowthCell[], size: number): GrassBlade[] {
   const blades: GrassBlade[] = [];
   entries.forEach((entry, cellIndex) => {
     if (entry.canopy > 0.42) return;
-    for (let bladeIndex = 0; bladeIndex < 7; bladeIndex += 1) {
+    const count = size > 105 ? 3 : window.innerWidth <= 720 ? 5 : 9;
+    for (let bladeIndex = 0; bladeIndex < count; bladeIndex += 1) {
       const seedX = hash2(cellIndex * 7 + bladeIndex, 17);
       const seedZ = hash2(cellIndex * 11 + bladeIndex, 29);
       blades.push({
-        x: entry.x + (seedX - 0.5) * 0.58,
-        z: entry.z + (seedZ - 0.5) * 0.58,
-        height: (0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12) * 1.7,
+        x: entry.x + (seedX - 0.5) * 0.4,
+        z: entry.z + (seedZ - 0.5) * 0.4,
+        height: (0.78 + hash2(cellIndex * 13 + bladeIndex, 41) * 1.12) * 2.55,
         phase: hash2(cellIndex * 19 + bladeIndex, 53),
         role: entry.role,
       });

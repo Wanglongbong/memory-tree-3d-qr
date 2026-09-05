@@ -1,6 +1,7 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { MemoryTreeQr } from "./MemoryTreeQr";
 import { decodeQrImage } from "./decodeQr";
+import { packQrMatrix, unpackQrMatrix } from "./qr";
 import { loadProjectFromHash, saveProjectToHash, type MemoryProject, type SceneKind, type Season, type TimeOfDay } from "./project";
 import { getScenePalette, getTreeSeasonSuggestion } from "./scenePalette";
 
@@ -20,31 +21,20 @@ const seasons: Array<{ id: Season; name: string }> = [
 
 export function App() {
   const [project, setProject] = useState<MemoryProject>(() => loadProjectFromHash() ?? loadDraft() ?? defaultProject);
-  const [sourceTab, setSourceTab] = useState<"upload" | "bank" | "text">(project.source === "vietqr" ? "bank" : project.source === "upload" ? "upload" : "text");
-  const [bank, setBank] = useState({ acqId: "970436", bankName: "Vietcombank", accountNo: "", accountName: "", amount: "", addInfo: "" });
-  const [bankOptions, setBankOptions] = useState<Array<{ acqId: string; name: string }>>([
-    { acqId: "970436", name: "Vietcombank" }, { acqId: "970415", name: "VietinBank" }, { acqId: "970418", name: "BIDV" },
-    { acqId: "970405", name: "Agribank" }, { acqId: "970422", name: "MB Bank" }, { acqId: "970407", name: "Techcombank" },
-    { acqId: "970416", name: "ACB" }, { acqId: "970432", name: "VPBank" }, { acqId: "970423", name: "TPBank" }, { acqId: "970403", name: "Sacombank" },
-  ]);
+  const [sourceTab, setSourceTab] = useState<"upload" | "text">(project.source === "text" ? "text" : "upload");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [shareLabel, setShareLabel] = useState("Sao chép link 3D");
 
-  useEffect(() => { localStorage.setItem("memory-tree-draft-v1", JSON.stringify(project)); }, [project]);
-  useEffect(() => {
-    fetch("/api/vietqr").then((response) => response.ok ? response.json() : Promise.reject()).then((result: { banks?: Array<{ acqId: string; name: string }> }) => {
-      if (result.banks?.length) setBankOptions(result.banks);
-    }).catch(() => undefined);
-  }, []);
-  const statusText = useMemo(() => project.source === "vietqr" ? `VietQR · ${bank.bankName}` : project.source === "upload" ? "QR từ ảnh trên thiết bị" : "Nội dung tùy chọn", [bank.bankName, project.source]);
+  useEffect(() => { try { localStorage.setItem("memory-tree-draft-v1", JSON.stringify(project)); } catch { /* Private browsing may disable storage. */ } }, [project]);
+  const statusText = project.source === "vietqr" ? "QR ngân hàng đã lưu" : project.source === "upload" ? "Giữ nguyên từng ô từ ảnh" : "Nội dung tùy chọn";
   const scenePalette = useMemo(() => getScenePalette(project.scene, project.season, project.time, project.accent, project.floorColor), [project.scene, project.season, project.time, project.accent, project.floorColor]);
   const treeSuggestion = getTreeSeasonSuggestion(project.season);
 
-  function update<K extends keyof MemoryProject>(key: K, value: MemoryProject[K]) { setProject((current) => ({ ...current, [key]: value })); }
+  function update<K extends keyof MemoryProject>(key: K, value: MemoryProject[K]) { setProject((current) => ({ ...current, [key]: value, ...(key === "payload" ? { matrix: undefined, source: "text" as const } : {}) })); }
   function chooseSeason(season: Season) {
     const suggestion = getTreeSeasonSuggestion(season);
-    setProject((current) => ({ ...current, season, accent: current.scene === "tree" ? suggestion.accent : current.accent, floorColor: undefined }));
+    setProject((current) => ({ ...current, season, accent: current.scene === "tree" ? suggestion.accent : current.accent, floorColor: current.scene === "tree" ? current.floorColor : undefined }));
   }
 
   async function readQr(event: ChangeEvent<HTMLInputElement>) {
@@ -53,25 +43,11 @@ export function App() {
     if (file.size > 10 * 1024 * 1024) { setNotice("Ảnh lớn hơn 10 MB. Hãy chọn ảnh nhỏ hơn để xử lý nhanh và rõ hơn."); return; }
     setBusy(true); setNotice("Đang đọc mã ngay trên thiết bị…");
     try {
-      const payload = await decodeQrImage(file);
-      setProject((current) => ({ ...current, payload, source: "upload" }));
-      setNotice("Đã đọc mã thành công. Ảnh không được tải lên máy chủ.");
+      const { payload, matrix } = await decodeQrImage(file);
+      setProject((current) => ({ ...current, payload, matrix: packQrMatrix(matrix), source: "upload" }));
+      setNotice(`Đã giữ nguyên lưới ${matrix.size} × ${matrix.size} ô. Ảnh chỉ được xử lý trên thiết bị của bạn.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Không thể đọc mã trong ảnh này."); }
     finally { setBusy(false); event.target.value = ""; }
-  }
-
-  async function createVietQr(event: FormEvent) {
-    event.preventDefault();
-    if (!/^\d{6,19}$/.test(bank.accountNo)) { setNotice("Số tài khoản cần có từ 6 đến 19 chữ số."); return; }
-    setBusy(true); setNotice("Đang tạo VietQR chính xác…");
-    try {
-      const response = await fetch("/api/vietqr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bank) });
-      const result = await response.json() as { qrCode?: string; error?: string };
-      if (!response.ok || !result.qrCode) throw new Error(result.error || "VietQR chưa phản hồi.");
-      setProject((current) => ({ ...current, payload: result.qrCode!, source: "vietqr" }));
-      setNotice("VietQR đã sẵn sàng. Hãy quét thử trước khi chia sẻ.");
-    } catch (error) { setNotice(`${error instanceof Error ? error.message : "Không thể tạo VietQR."} Bạn vẫn có thể tải ảnh QR từ ứng dụng ngân hàng ở thẻ bên cạnh.`); }
-    finally { setBusy(false); }
   }
 
   async function shareProject() {
@@ -92,17 +68,10 @@ export function App() {
       <div className="panel-heading"><span>01</span><div><strong>Nội dung trong mã</strong><small>{statusText}</small></div></div>
       <div className="source-tabs" role="tablist" aria-label="Nguồn mã QR">
         <button className={sourceTab === "upload" ? "active" : ""} onClick={() => setSourceTab("upload")}>Tải ảnh QR</button>
-        <button className={sourceTab === "bank" ? "active" : ""} onClick={() => setSourceTab("bank")}>Tài khoản</button>
         <button className={sourceTab === "text" ? "active" : ""} onClick={() => setSourceTab("text")}>Link / chữ</button>
       </div>
-      {sourceTab === "upload" && <label className="dropzone"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={readQr} disabled={busy}/><span className="upload-icon">↥</span><strong>Chọn ảnh mã QR</strong><small>PNG, JPG hoặc WEBP · tối đa 10 MB<br/>Ảnh không rời khỏi thiết bị</small></label>}
+      {sourceTab === "upload" && <label className="dropzone"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={readQr} disabled={busy}/><span className="upload-icon">↥</span><strong>{busy ? "Đang đọc từng ô…" : "Chọn ảnh mã QR"}</strong><small>Ảnh QR ngân hàng hoặc QR bất kỳ<br/>PNG, JPG, WEBP · tối đa 10 MB</small></label>}
       {sourceTab === "text" && <div className="field-stack"><label>Nội dung cần mã hóa<textarea value={project.payload} onChange={(e) => update("payload", e.target.value)} rows={4}/></label><small className="privacy-note">Không nhập mật khẩu hoặc dữ liệu bí mật.</small></div>}
-      {sourceTab === "bank" && <form className="bank-form" onSubmit={createVietQr}>
-        <div className="two-fields"><label>Ngân hàng<select value={bank.acqId} onChange={(e) => { const option = e.target.selectedOptions[0]; setBank({...bank, acqId: e.target.value, bankName: option.text}); }}>{bankOptions.map((item) => <option key={item.acqId} value={item.acqId}>{item.name}</option>)}</select></label><label>Số tài khoản<input inputMode="numeric" value={bank.accountNo} onChange={(e) => setBank({...bank, accountNo: e.target.value.replace(/\D/g, "")})} placeholder="Chỉ nhập chữ số"/></label></div>
-        <label>Tên chủ tài khoản <small>(tùy chọn)</small><input value={bank.accountName} onChange={(e) => setBank({...bank, accountName: e.target.value.toUpperCase()})} placeholder="NGUYEN VAN A"/></label>
-        <div className="two-fields"><label>Số tiền <small>(tùy chọn)</small><input inputMode="numeric" value={bank.amount} onChange={(e) => setBank({...bank, amount: e.target.value.replace(/\D/g, "")})} placeholder="VD: 20000"/></label><label>Nội dung <small>(tùy chọn)</small><input value={bank.addInfo} onChange={(e) => setBank({...bank, addInfo: e.target.value})} maxLength={25} placeholder="Coc tra da"/></label></div>
-        <button className="primary-action" disabled={busy}>{busy ? "Đang tạo…" : "Tạo VietQR"}</button>
-      </form>}
       {notice && <p className="notice" role="status">{notice}</p>}
 
       <div className="panel-heading panel-section"><span>02</span><div><strong>Chọn thế giới</strong><small>Ba cách kể cùng một mã</small></div></div>
@@ -128,4 +97,4 @@ export function App() {
   </main>;
 }
 
-function loadDraft(): MemoryProject | null { try { const value = localStorage.getItem("memory-tree-draft-v1"); return value ? JSON.parse(value) as MemoryProject : null; } catch { return null; } }
+function loadDraft(): MemoryProject | null { try { const value = localStorage.getItem("memory-tree-draft-v1"); if (!value) return null; const project = JSON.parse(value) as MemoryProject; if (project.matrix) unpackQrMatrix(project.matrix); return project; } catch { return null; } }
